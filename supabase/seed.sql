@@ -111,20 +111,6 @@ select
   '00000000-0000-0000-0000-000000003002',
   '00000000-0000-0000-0000-000000000102',
   r.id,
-  'cooperative_manager'
-from public.roles r
-where false;
-
-insert into public.memberships (
-  id, tenant_id, organization_id, unit_id, user_id, role_id, status
-)
-select
-  '00000000-0000-0000-0000-000000006002',
-  '00000000-0000-0000-0000-000000001000',
-  '00000000-0000-0000-0000-000000002002',
-  '00000000-0000-0000-0000-000000003002',
-  '00000000-0000-0000-0000-000000000102',
-  r.id,
   'active'
 from public.roles r
 where r.code = 'cooperative_manager'
