@@ -1,0 +1,11 @@
+{
+  "name": "verdis",
+  "private": true,
+  "scripts": {
+    "dev": "pnpm --filter @verdis/web dev",
+    "build": "pnpm --filter @verdis/web build",
+    "typecheck": "pnpm --filter @verdis/web typecheck",
+    "test": "pnpm --filter @verdis/web test",
+    "test:db": "supabase test db"
+  }
+}
