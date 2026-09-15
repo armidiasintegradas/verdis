@@ -2,27 +2,29 @@ import { beforeEach, expect, test, vi } from 'vitest'
 import type { ActiveScope } from '@/domain/scope'
 import { createMovement } from './create-movement'
 
-const insert = vi.fn()
-const select = vi.fn()
-const single = vi.fn()
-const from = vi.fn()
-const getUser = vi.fn()
+const mocks = vi.hoisted(() => ({
+  insert: vi.fn(),
+  select: vi.fn(),
+  single: vi.fn(),
+  from: vi.fn(),
+  getUser: vi.fn(),
+}))
 
 vi.mock('@/lib/supabase/client', () => ({
   supabase: {
-    auth: { getUser },
-    from,
+    auth: { getUser: mocks.getUser },
+    from: mocks.from,
   },
 }))
 
 beforeEach(() => {
   vi.clearAllMocks()
 
-  single.mockResolvedValue({ data: { id: 'movement-id' }, error: null })
-  select.mockReturnValue({ single })
-  insert.mockReturnValue({ select })
-  from.mockReturnValue({ insert })
-  getUser.mockResolvedValue({
+  mocks.single.mockResolvedValue({ data: { id: 'movement-id' }, error: null })
+  mocks.select.mockReturnValue({ single: mocks.single })
+  mocks.insert.mockReturnValue({ select: mocks.select })
+  mocks.from.mockReturnValue({ insert: mocks.insert })
+  mocks.getUser.mockResolvedValue({
     data: { user: { id: 'authenticated-user-id' } },
     error: null,
   })
@@ -47,8 +49,8 @@ test('always derives security-sensitive scope and creator from trusted context',
 
   await expect(createMovement(scope, input)).resolves.toEqual({ id: 'movement-id' })
 
-  expect(from).toHaveBeenCalledWith('movements')
-  expect(insert).toHaveBeenCalledWith({
+  expect(mocks.from).toHaveBeenCalledWith('movements')
+  expect(mocks.insert).toHaveBeenCalledWith({
     tenant_id: scope.tenantId,
     organization_id: scope.organizationId,
     unit_id: scope.unitId,
@@ -69,7 +71,7 @@ test('always derives security-sensitive scope and creator from trusted context',
 })
 
 test('surfaces authentication errors before inserting', async () => {
-  getUser.mockResolvedValue({
+  mocks.getUser.mockResolvedValue({
     data: { user: null },
     error: null,
   })
@@ -90,5 +92,5 @@ test('surfaces authentication errors before inserting', async () => {
     ),
   ).rejects.toThrow('Authenticated user is required')
 
-  expect(insert).not.toHaveBeenCalled()
+  expect(mocks.insert).not.toHaveBeenCalled()
 })
