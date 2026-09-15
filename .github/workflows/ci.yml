@@ -6,6 +6,9 @@ on:
     branches:
       - main
 
+permissions:
+  contents: write
+
 concurrency:
   group: verdis-ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
@@ -80,3 +83,44 @@ jobs:
       - name: Stop local Supabase
         if: always()
         run: supabase stop --no-backup
+
+  freeze-generated:
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    needs: [web, database]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout pull request branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+
+      - name: Download pnpm lockfile
+        uses: actions/download-artifact@v4
+        with:
+          name: pnpm-lock
+          path: .generated/pnpm
+
+      - name: Download database types
+        uses: actions/download-artifact@v4
+        with:
+          name: database-types
+          path: .generated/database
+
+      - name: Install generated contracts
+        run: |
+          cp .generated/pnpm/pnpm-lock.yaml pnpm-lock.yaml
+          mkdir -p apps/web/src/lib/supabase
+          cp .generated/database/database.types.ts apps/web/src/lib/supabase/database.types.ts
+          rm -rf .generated
+
+      - name: Commit generated contracts when changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add pnpm-lock.yaml apps/web/src/lib/supabase/database.types.ts
+          if git diff --cached --quiet; then
+            echo "Generated contracts are already current."
+          else
+            git commit -m "chore: freeze generated contracts [skip ci]"
+            git push origin HEAD:${{ github.event.pull_request.head.ref }}
+          fi
