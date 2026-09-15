@@ -3,8 +3,8 @@ create extension if not exists pgtap with schema extensions;
 set local search_path = public, extensions;
 select plan(10);
 
-select has_table('public','movements');
-select has_table('public','weighings');
+select has_table('public'::name,'movements'::name);
+select has_table('public'::name,'weighings'::name);
 
 insert into auth.users (id, instance_id, aud, role, email, email_confirmed_at, created_at, updated_at, raw_app_meta_data, raw_user_meta_data)
 values ('11000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000000','authenticated','authenticated','movement@verdis.local',now(),now(),now(),'{}'::jsonb,'{}'::jsonb);

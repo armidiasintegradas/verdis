@@ -3,8 +3,8 @@ create extension if not exists pgtap with schema extensions;
 set local search_path = public, extensions;
 select plan(5);
 
-select has_table('public','documents');
-select has_index('public','documents','documents_tenant_sha_idx');
+select has_table('public'::name,'documents'::name);
+select has_index('public'::name,'documents'::name,'documents_tenant_sha_idx'::name);
 select is((select public from storage.buckets where id='evidence-documents'),false,'evidence bucket is private');
 
 insert into auth.users (id, instance_id, aud, role, email, email_confirmed_at, created_at, updated_at, raw_app_meta_data, raw_user_meta_data)

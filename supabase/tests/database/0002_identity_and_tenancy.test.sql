@@ -5,15 +5,15 @@ set local search_path = public, extensions;
 
 select plan(9);
 
-select has_table('public','tenants');
-select has_table('public','organizations');
-select has_table('public','units');
-select has_table('public','user_profiles');
-select col_is_pk('public','tenants','id');
-select col_is_fk('public','organizations','tenant_id');
-select col_is_fk('public','units','organization_id');
-select col_is_fk('public','user_profiles','user_id');
-select has_function('app_private','ensure_unit_tenant_matches_organization', array[]::text[]);
+select has_table('public'::name,'tenants'::name);
+select has_table('public'::name,'organizations'::name);
+select has_table('public'::name,'units'::name);
+select has_table('public'::name,'user_profiles'::name);
+select col_is_pk('public'::name,'tenants'::name,'id'::name);
+select col_is_fk('public'::name,'organizations'::name,'tenant_id'::name);
+select col_is_fk('public'::name,'units'::name,'organization_id'::name);
+select col_is_fk('public'::name,'user_profiles'::name,'user_id'::name);
+select has_function('app_private'::name,'ensure_unit_tenant_matches_organization'::name,array[]::name[]);
 
 select * from finish();
 rollback;

@@ -5,12 +5,12 @@ set local search_path = public, extensions;
 
 select plan(6);
 
-select has_type('public', 'tenant_status');
-select has_type('public', 'membership_status');
-select has_type('public', 'movement_type');
-select has_type('public', 'movement_status');
-select has_type('public', 'evidence_level');
-select has_type('public', 'review_status');
+select has_type('public'::name, 'tenant_status'::name);
+select has_type('public'::name, 'membership_status'::name);
+select has_type('public'::name, 'movement_type'::name);
+select has_type('public'::name, 'movement_status'::name);
+select has_type('public'::name, 'evidence_level'::name);
+select has_type('public'::name, 'review_status'::name);
 
 select * from finish();
 rollback;

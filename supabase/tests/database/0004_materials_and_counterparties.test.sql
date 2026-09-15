@@ -2,9 +2,9 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set local search_path = public, extensions;
 select plan(5);
-select has_table('public','materials');
-select has_table('public','material_aliases');
-select has_table('public','counterparties');
+select has_table('public'::name,'materials'::name);
+select has_table('public'::name,'material_aliases'::name);
+select has_table('public'::name,'counterparties'::name);
 insert into public.tenants (id, slug, name) values
 ('21000000-0000-0000-0000-000000000001','materials-a','Materials A'),
 ('21000000-0000-0000-0000-000000000002','materials-b','Materials B');

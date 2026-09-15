@@ -1,10 +1,10 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 set local search_path = public, extensions;
-select plan(8);
+select plan(9);
 
-select has_table('public','stock_ledger_entries');
-select has_table('public','audit_events');
+select has_table('public'::name,'stock_ledger_entries'::name);
+select has_table('public'::name,'audit_events'::name);
 
 insert into auth.users (id, instance_id, aud, role, email, email_confirmed_at, created_at, updated_at, raw_app_meta_data, raw_user_meta_data)
 values ('14000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000000','authenticated','authenticated','stock@verdis.local',now(),now(),now(),'{}'::jsonb,'{}'::jsonb);

@@ -3,11 +3,11 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set local search_path = public, extensions;
 
-select plan(5);
+select plan(6);
 
-select has_table('public','roles');
-select has_table('public','permissions');
-select has_table('public','memberships');
+select has_table('public'::name,'roles'::name);
+select has_table('public'::name,'permissions'::name);
+select has_table('public'::name,'memberships'::name);
 
 insert into auth.users (
   id, instance_id, aud, role, email,
