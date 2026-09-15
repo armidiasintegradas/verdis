@@ -1,0 +1,14 @@
+node_modules/
+.pnpm-store/
+dist/
+coverage/
+.env
+.env.local
+.env.*.local
+!.env.example
+.DS_Store
+.vscode/
+.idea/
+.supabase/
+supabase/.branches/
+supabase/.temp/
