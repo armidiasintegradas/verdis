@@ -6,80 +6,67 @@ Data: 16/09/2026
 
 ## 1. Objetivo
 
-Implementar o fluxo profundo de Recebimentos do M1 Cooperative Pilot como um vertical slice persistente sobre a arquitetura existente, preservando o contrato visual do VERDIS UI SYSTEM V1.1 e as máquinas de estado homologadas no Stitch.
+Implementar o fluxo profundo de Recebimentos do M1 Cooperative Pilot como um vertical slice persistente sobre a arquitetura existente, preservando o VERDIS UI SYSTEM V1.1 e as máquinas de estado homologadas no Stitch.
 
-O fluxo deve cobrir:
+Fluxo funcional:
 
 `Dados → Comprovação → Conferência → Decisão/Justificativa → Concluir`
 
-com persistência real de movimento, documento, evidência, decisão humana e efeito de estoque.
+O incremento deve persistir movimento, documento, evidência, extração quando disponível, decisão humana e efeito de estoque sem transformar estados efêmeros de UI em fatos de domínio.
 
 ## 2. Princípios obrigatórios
 
-1. O recebimento nasce como `movement` em estado `draft`.
-2. O upload de documento nunca pode apagar ou invalidar o rascunho do movimento.
-3. O arquivo original deve ser preservado no bucket privado `evidence-documents` e registrado em `documents`.
-4. A interpretação do documento é assíncrona e não pode sobrescrever silenciosamente o valor informado pelo operador.
+1. O recebimento nasce como `movement` com `movement_type = receipt` e `status = draft`.
+2. Upload, falha de rede ou processamento documental nunca podem apagar o rascunho do movimento.
+3. O original enviado é preservado no bucket privado `evidence-documents` e registrado em `documents`.
+4. Extração automática não sobrescreve silenciosamente o valor informado pelo operador.
 5. `Documento processado` e `divergência operacional` são dimensões independentes.
-6. Uma divergência exige decisão humana explícita.
-7. Quando o operador mantém o valor originalmente registrado no cenário homologado de divergência, uma justificativa é obrigatória.
-8. Somente a transição `draft → posted` produz efeito de estoque.
-9. A confirmação deve ser atômica no banco.
-10. Estados transitórios de interface não devem ser promovidos a fatos persistentes desnecessários.
+6. Divergência exige decisão humana explícita; nenhuma opção inicia selecionada.
+7. No cenário homologado, manter o valor registrado diante de divergência exige justificativa.
+8. Somente `draft → posted` produz efeito de estoque.
+9. A confirmação é atômica no banco.
+10. O frontend nunca lança diretamente em `stock_ledger_entries`.
 
 ## 3. Abordagem escolhida
 
-### Vertical slice persistente com Supabase real
+A implementação reutiliza as estruturas existentes:
 
-A implementação deve reutilizar as estruturas existentes em vez de criar uma segunda camada paralela de protótipo.
-
-Responsabilidades:
-
-- `movements`: movimento operacional e quantidade efetivamente adotada;
+- `movements`: movimento e quantidade efetivamente adotada;
 - `documents`: identidade e preservação do arquivo original;
 - `document_extractions`: histórico append-only da interpretação automática;
-- `evidences`: vínculo entre movimento e documento, com valores declarados e extraídos;
+- `evidences`: vínculo movimento-documento, valores declarados e extraídos;
 - `validations`: decisão humana e justificativa;
-- `stock_ledger_entries`: efeito de estoque gerado somente após `posted`.
+- `stock_ledger_entries`: efeito de estoque gerado após `posted`.
 
-Não criar tabela específica para cada passo visual do wizard.
+Não criar tabela específica para passos do wizard.
 
-## 4. Componentes de aplicação
+## 4. Componentes e responsabilidades
 
-### 4.1 ReceiptFlow
+### 4.1 `ReceiptFlow`
 
-Responsabilidade: coordenar a jornada de UI.
+Orquestra a jornada de UI e navegação entre passos. Não acessa SQL diretamente e não contém regra de estoque.
 
-Passos:
+### 4.2 `ReceiptDraftService`
 
-- Dados;
-- Comprovação;
-- Conferência;
-- Concluir.
+Responsável por:
 
-Não acessa SQL diretamente e não contém regra de estoque.
-
-### 4.2 ReceiptDraftService
-
-Responsabilidade:
-
-- criar `movement` com `movement_type = receipt` e `status = draft`;
-- atualizar os campos editáveis enquanto o movimento permanece `draft`;
+- criar o `movement` draft;
+- atualizar campos editáveis enquanto o movimento permanecer `draft`;
 - nunca marcar o movimento como `posted`.
 
-### 4.3 EvidenceUploadService
+### 4.3 `EvidenceUploadService`
 
-Responsabilidade:
+Responsável por:
 
 - calcular SHA-256 do arquivo;
-- enviar o arquivo ao bucket privado `evidence-documents`;
-- criar a linha correspondente em `documents`;
+- enviar ao bucket `evidence-documents`;
+- criar o registro em `documents`;
 - criar/ligar `evidence` ao movimento;
-- preservar o rascunho do movimento em qualquer falha de upload.
+- manter o draft intacto em qualquer falha de upload.
 
-### 4.4 ReceiptConferenceService
+### 4.4 `ReceiptConferenceService`
 
-Responsabilidade: montar um view model de conferência sem tomar decisão pelo operador.
+Monta um view model de conferência sem decidir pelo operador.
 
 Estados derivados:
 
@@ -87,36 +74,22 @@ Estados derivados:
 - `match`;
 - `divergence`.
 
-Deve comparar fatos registrados e documentais quando estes realmente existirem.
+Ele só usa dados documentais quando uma extração realmente existe.
 
-### 4.5 ConfirmReceiptService
+### 4.5 `ConfirmReceiptService`
 
-Responsabilidade: única porta de efetivação do recebimento.
-
-Deve chamar uma operação transacional no banco que:
-
-1. valide escopo e permissão;
-2. confirme que o movimento é `receipt` e está em `draft`;
-3. valide a decisão humana, se houver divergência;
-4. exija justificativa quando a decisão for manter o valor registrado no cenário aplicável;
-5. registre `validation` humana;
-6. atualize a quantidade adotada quando o operador escolher o valor documental;
-7. altere o movimento para `posted`;
-8. deixe o trigger existente produzir o lançamento em `stock_ledger_entries`;
-9. retorne movimento confirmado e saldo resultante.
+Única porta de efetivação. Chama o RPC transacional `confirm_receipt_m1(...)`.
 
 ## 5. Modelo de divergência
 
 Exemplo homologado:
 
-- quantidade registrada: `480 kg`;
-- quantidade documental: `482 kg`;
-- diferença absoluta: `+2 kg`;
+- registrado: `480 kg`;
+- documento: `482 kg`;
+- diferença: `+2 kg`;
 - diferença percentual: `+0,42%`.
 
-Nenhuma opção deve iniciar selecionada.
-
-### 5.1 Persistência conceitual
+Persistência conceitual:
 
 ```text
 MOVEMENT
@@ -140,14 +113,14 @@ rule_code = RECEIPT_USE_DOCUMENT_QUANTITY
 reason = justificativa quando obrigatória
 ```
 
-### 5.2 Decisão: manter 480 kg
+### 5.1 Manter 480 kg
 
 - `movements.quantity_kg` permanece `480`;
-- `validations` registra a decisão;
-- justificativa é obrigatória no cenário homologado;
-- depois da decisão válida, o movimento passa para `posted`.
+- a decisão humana é registrada em `validations`;
+- a justificativa é obrigatória no cenário homologado;
+- após validação, o movimento vai para `posted`.
 
-### 5.3 Decisão: usar 482 kg
+### 5.2 Usar 482 kg
 
 Na mesma transação de confirmação:
 
@@ -157,31 +130,34 @@ Na mesma transação de confirmação:
 
 O valor original `480` continua preservado em `evidences.claimed_fields`.
 
-## 6. RPC transacional de confirmação
+## 6. RPC transacional `confirm_receipt_m1`
 
-Criar uma função transacional dedicada, com nome final definido no plano de implementação. Nome de referência:
-
-`confirm_receipt_m1(...)`
-
-Entrada mínima conceitual:
+Entrada mínima:
 
 - `movement_id`;
-- decisão (`use_document` | `keep_registered` | `registered_only`);
-- `evidence_id` quando aplicável;
-- justificativa quando obrigatória.
+- `decision`: `use_document | keep_registered | registered_only`;
+- `evidence_id`, quando aplicável;
+- `reason`, quando obrigatória.
 
-Comportamento obrigatório:
+Regras obrigatórias:
 
-- falha inteira se qualquer pré-condição falhar;
-- não deixar movimento parcialmente alterado;
-- não lançar estoque mais de uma vez;
-- não permitir segunda confirmação de movimento já `posted`;
-- não aceitar quantidade documental sem evidência processada correspondente;
-- não aceitar justificativa vazia quando obrigatória.
+1. validar usuário, escopo e permissão;
+2. exigir movimento `receipt` + `draft`;
+3. em `use_document`, exigir evidência processada e quantidade documental válida;
+4. em `keep_registered` diante de divergência, exigir justificativa não vazia;
+5. registrar a `validation` humana;
+6. atualizar a quantidade adotada se a decisão for `use_document`;
+7. alterar o movimento para `posted`;
+8. deixar o trigger existente criar o ledger;
+9. retornar o movimento confirmado e o saldo atualizado.
 
-## 7. Estados de documento
+A função deve falhar integralmente diante de qualquer pré-condição inválida. Não pode haver quantidade alterada sem confirmação, decisão registrada sem postagem correspondente ou estoque parcial.
 
-Os estados canônicos de UI permanecem:
+Uma segunda tentativa de confirmação de movimento já `posted` deve ser rejeitada sem duplicar estoque.
+
+## 7. Estados documentais
+
+Estados canônicos de UI:
 
 ```text
 NONE
@@ -193,9 +169,11 @@ UPLOAD_FAILED
 PENDING_EVIDENCE
 ```
 
-### Persistência
+Não persistir como domínio:
 
-Não persistir `SELECTED`, percentual de upload ou erro momentâneo de rede como estados de domínio.
+- `SELECTED`;
+- percentual de upload;
+- erro transitório de rede.
 
 Persistir fatos duráveis:
 
@@ -204,46 +182,51 @@ Persistir fatos duráveis:
 - evidência vinculada;
 - extração concluída;
 - decisão humana;
-- ausência de documento quando resultar em pendência operacional.
+- ausência de documento quando isso exigir ação posterior.
 
-## 8. Rotas e retomada segura
+O enum `review_status` não é a máquina de estado de upload.
 
-Rota base proposta:
+## 8. Rotas
+
+Rota de um recebimento em andamento:
 
 `/recebimentos/novo/:movementId`
 
-Passo atual representado em query string:
+Passo solicitado na URL:
 
 - `?step=dados`;
 - `?step=comprovacao`;
 - `?step=conferencia`;
 - `?step=concluir`.
 
-O `movementId` é a âncora persistente da jornada.
+`movementId` é a âncora persistente. A query string expressa intenção de navegação, mas nunca pode forçar um estado incompatível com os fatos persistidos.
 
-### 8.1 Refresh do navegador
+## 9. Reconstrução determinística após refresh/reentrada
 
-Ao recarregar a página, a UI deve reconstruir o estado a partir de fatos persistidos.
+A aplicação deriva o estado efetivo nesta ordem de precedência:
 
-Regras:
+1. **Se `movement.status = posted`** → abrir conclusão/detalhe somente leitura; nunca reabrir edição.
+2. **Se existe divergência processada sem `validation` de resolução** → abrir `conferencia` em estado `divergence`.
+3. **Se existe decisão `keep_registered` que ainda não satisfaz a justificativa obrigatória** → abrir `conferencia` no subestado `justification`.
+4. **Se existe documento preservado e não existe extração concluída** → abrir `conferencia` em estado `processing` quando o usuário já tiver avançado da comprovação; caso contrário, mostrar `comprovacao` com documento enviado/processando.
+5. **Se existe documento processado sem divergência** → abrir `conferencia` em estado `match`.
+6. **Se o draft existe e o operador marcou explicitamente o caminho sem documento** → abrir `conferencia` com dados registrados e comprovação pendente.
+7. **Se o draft existe e nenhum fato posterior existe** → abrir `comprovacao`.
+8. **Antes da criação do draft** → rota de criação inicia em `dados` sem `movementId`; ao salvar dados com sucesso, navegar para `/recebimentos/novo/:movementId?step=comprovacao`.
 
-- `draft` sem documento → retomar no último passo operacional seguro;
-- documento armazenado sem extração concluída → mostrar estado `Processando`;
-- extração concluída com divergência e sem decisão → abrir Conferência / Divergência;
-- decisão que exige justificativa ainda não concluída → abrir Justificativa;
-- movimento `posted` → não permitir reedição; redirecionar para conclusão/detalhe.
+Para suportar a distinção entre itens 4, 6 e 7 sem criar uma tabela de wizard, a aplicação pode persistir apenas um marcador operacional mínimo no draft ou em metadado próprio do fluxo, definido no plano de implementação. Esse marcador não pode duplicar estados do domínio nem produzir efeito de estoque.
 
-### 8.2 Upload interrompido
+## 10. Upload interrompido
 
-Se o refresh ocorrer antes de o arquivo ter sido efetivamente preservado, a UI volta ao estado seguro anterior e não inventa um documento.
+Se o refresh ocorrer antes de existir registro durável de documento, a UI retorna ao estado seguro de comprovação e não inventa arquivo enviado.
 
-Se o registro em `documents` já existir, o arquivo é considerado preservado e pode continuar em processamento.
+Se `documents` já contiver o arquivo preservado e ligado ao movimento por `evidences`, o upload é considerado concluído mesmo que a extração esteja pendente.
 
-## 9. Comportamento por passo
+## 11. Comportamento por passo
 
-### 9.1 Dados
+### 11.1 Dados
 
-Campos homologados:
+Campos:
 
 - origem;
 - material;
@@ -255,7 +238,7 @@ Ao avançar:
 - criar ou atualizar `movement` em `draft`;
 - não alterar estoque.
 
-### 9.2 Comprovação — vazio
+### 11.2 Comprovação — vazio
 
 Ações:
 
@@ -263,60 +246,47 @@ Ações:
 - `ENVIAR ARQUIVO`;
 - `CONTINUAR SEM DOCUMENTO`.
 
-### 9.3 Arquivo selecionado
+### 11.3 Arquivo selecionado
 
-Estado local:
+Estado local com nome, tipo e tamanho. `ENVIAR DOCUMENTO` é a ação principal e `CONTINUAR` normal permanece desabilitado até o envio enquanto o caminho documental estiver ativo.
 
-- nome/tipo/tamanho;
-- `Pronto para enviar`;
-- `ENVIAR DOCUMENTO` habilitado;
-- `CONTINUAR` normal desabilitado enquanto o caminho documental escolhido não foi enviado.
+### 11.4 Enviando
 
-### 9.4 Enviando
+Bloquear ações conflitantes e impedir duplicação de upload.
 
-- mostrar progresso disponível;
-- bloquear ações conflitantes;
-- não permitir duplicação de upload.
+### 11.5 Documento enviado / Processando
 
-### 9.5 Documento enviado / Processando
-
-- arquivo original já preservado;
+- original preservado;
 - `VISUALIZAR DOCUMENTO` disponível;
-- processamento pode continuar em segundo plano;
-- operador pode avançar conforme contrato homologado;
-- não permitir remover/trocar o original neste estado no M1.
+- processamento segue em segundo plano;
+- operador pode avançar;
+- não remover/trocar o original neste estado no M1.
 
-### 9.6 Falha de upload
+### 11.6 Falha de upload
 
-- manter rascunho intacto;
+- draft intacto;
 - `TENTAR NOVAMENTE`;
 - trocar arquivo;
 - tirar outra foto;
 - continuar sem documento;
-- não mostrar erro técnico de storage/API na UI operacional.
+- sem detalhes técnicos de storage/API na UI operacional.
 
-### 9.7 Conferência / Processando
+### 11.7 Conferência / Processando
 
-- mostrar apenas os dados registrados;
-- não fabricar valores extraídos;
-- permitir confirmação com os dados registrados quando a regra homologada permitir.
+Mostrar apenas dados registrados e status documental. Não fabricar extração. O operador pode confirmar com os dados registrados conforme contrato homologado.
 
-### 9.8 Conferência / Divergência
+### 11.8 Conferência / Divergência
 
-- mostrar registrado, documental, diferença absoluta e percentual;
-- nenhuma opção pré-selecionada;
-- `USAR 482 KG` e `MANTER 480 KG` no exemplo homologado;
-- continuar desabilitado até decisão explícita.
+Mostrar registrado, documental e diferença. Nenhuma decisão começa selecionada. CTA de confirmação permanece bloqueado até decisão válida.
 
-### 9.9 Justificativa
+### 11.9 Justificativa
 
-Quando exigida:
+Quando obrigatória:
 
-- textarea obrigatória;
-- `CONFIRMAR RECEBIMENTO` desabilitado enquanto vazia ou inválida;
-- preservar todos os valores da divergência na tela.
+- textarea vazia bloqueia `CONFIRMAR RECEBIMENTO`;
+- tela preserva registrado, documental, diferença e decisão.
 
-### 9.10 Conclusão
+### 11.10 Conclusão
 
 Mostrar:
 
@@ -333,11 +303,34 @@ Mostrar:
 - `VER MOVIMENTAÇÃO`;
 - `RECEBER OUTRO MATERIAL`.
 
-## 10. Tratamento de erros
+## 12. Processamento e extração no M1
 
-### Validação de formulário
+O provedor final de OCR/IA de produção está fora do escopo deste incremento, mas o contrato de integração deve ser real.
 
-Erro exibido junto ao campo, sem perder rascunho.
+Para testes e ambiente de desenvolvimento, a implementação pode usar fixtures controladas ou uma função de teste para inserir `document_extractions` coerentes. Essa simulação deve ficar explicitamente separada do caminho de produção e nunca ser apresentada como extração real.
+
+Quando uma extração é concluída, o registro em `document_extractions` permanece append-only. O `ReceiptConferenceService` lê a extração relevante e compõe o view model; ele não modifica o movimento.
+
+## 13. Pendências
+
+Pendência = ação humana necessária.
+
+Casos do fluxo:
+
+- recebimento confirmado sem documento e que requer anexação posterior;
+- falha de upload abandonada quando ainda houver ação necessária;
+- divergência aguardando decisão;
+- justificativa obrigatória pendente.
+
+Processamento documental saudável não gera pendência.
+
+A visão de Pendências pode ser derivada dos fatos existentes; este incremento não exige uma nova tabela `pending_items`.
+
+## 14. Erros
+
+### Formulário
+
+Erro junto ao campo, sem perder rascunho.
 
 ### Upload
 
@@ -345,19 +338,13 @@ Falha não altera movimento nem estoque.
 
 ### Extração
 
-Falha de interpretação nunca remove o documento original.
-
-Quando exigir ação humana, pode originar pendência específica sem marcar processamento saudável como pendência.
+Falha nunca remove o original. Se exigir intervenção, gera estado acionável sem transformar processamento normal em erro.
 
 ### Confirmação
 
-Falha transacional significa:
+Falha transacional mantém o movimento em `draft`, sem ledger parcial e sem decisão parcialmente efetivada.
 
-- movimento permanece `draft`;
-- nenhuma entrada parcial de estoque;
-- nenhuma decisão parcialmente efetivada.
-
-## 11. Segurança e autorização
+## 15. Segurança
 
 Reutilizar:
 
@@ -366,41 +353,24 @@ Reutilizar:
 - RLS existente;
 - permissões `movement.create`, `movement.read`, `movement.correct`, `evidence.upload`, `evidence.read` conforme aplicável.
 
-Não duplicar autenticação ou autorização no componente de página.
+`confirm_receipt_m1` deve validar autorização no banco e nunca confiar apenas na UI.
 
-O RPC de confirmação deve verificar autorização no banco e não confiar apenas no estado do frontend.
+## 16. Estoque
 
-## 12. Estoque
+O frontend não escreve no ledger.
 
-O frontend nunca insere diretamente em `stock_ledger_entries`.
+Regra:
 
-Efeito esperado:
+`saldo novo = saldo anterior + quantidade adotada`
 
-```text
-saldo anterior + quantidade adotada = novo saldo
-```
+O trigger existente em `movements` continua sendo a única origem automática da entrada de estoque quando ocorre `draft → posted`.
 
-O trigger existente em `movements` continua sendo a única origem do lançamento automático quando ocorre `draft → posted`.
+## 17. Reutilização futura em Vendas
 
-## 13. Pendências
+Devem ser reutilizáveis:
 
-O fluxo pode produzir pendência somente quando houver ação humana necessária.
-
-Exemplos:
-
-- recebimento confirmado sem documento;
-- upload falhou e foi abandonado sem resolução, quando aplicável ao fluxo;
-- divergência aguardando decisão;
-- justificativa obrigatória pendente.
-
-Não criar pendência apenas porque um documento está sendo processado normalmente.
-
-## 14. Reutilização futura em Vendas
-
-Devem ser desenhados para reutilização:
-
-- máquina de upload;
-- documento preservado;
+- upload;
+- preservação do original;
 - processamento assíncrono;
 - conferência;
 - comparação registrado × documental;
@@ -409,97 +379,80 @@ Devem ser desenhados para reutilização:
 - retomada do wizard;
 - tratamento de erros.
 
-Recebimentos continua responsável apenas pelas regras específicas de entrada e quantidade.
+Vendas adicionará posteriormente regras próprias de saldo, comprador, preço/kg e valor total.
 
-Vendas adicionará posteriormente:
-
-- saldo disponível;
-- bloqueio por saldo insuficiente;
-- preço/kg;
-- valor total;
-- comprador;
-- comparação comercial coerente.
-
-## 15. Estratégia de testes
+## 18. Estratégia de testes
 
 ### Unidade
 
-Testar:
-
-- cálculo de diferença absoluta e percentual;
-- derivação `processing | match | divergence`;
-- regra de justificativa obrigatória;
-- seleção da quantidade adotada;
-- reconstrução do passo a partir do estado persistido.
+- diferença absoluta/percentual;
+- `processing | match | divergence`;
+- justificativa obrigatória;
+- quantidade adotada;
+- reconstrução determinística do passo.
 
 ### Componentes
 
-Testar:
-
 - stepper;
-- CTA habilitado/desabilitado;
-- upload failure sem perda do rascunho;
-- ausência de dados extraídos enquanto processando;
+- CTAs habilitados/desabilitados;
+- upload failure sem perda de draft;
+- ausência de dados extraídos durante processamento;
 - divergência sem decisão pré-selecionada;
 - justificativa vazia bloqueando confirmação.
 
-### Integração / banco
+### Banco/integração
 
-Testar:
-
-- criação de draft;
-- preservação de documento e evidência no mesmo escopo;
-- RPC rejeita confirmação inválida;
+- criação e atualização de draft;
+- documento/evidência no mesmo escopo;
+- RPC rejeita movimento não draft ou não receipt;
+- RPC aceita `registered_only` sem documento;
 - RPC aceita `keep_registered` com justificativa válida;
-- RPC aceita `use_document` com evidence processada;
+- RPC aceita `use_document` com evidência processada;
 - `draft → posted` cria uma única entrada no ledger;
 - segunda confirmação não duplica estoque;
 - falha transacional não produz estoque parcial;
-- RLS/permission checks continuam válidos.
+- RLS e permissões continuam válidas.
 
 ### Regressão funcional
 
-Cenários mínimos:
-
-1. 480 kg, sem documento, confirmar com dado registrado;
+1. 480 kg, sem documento, confirmar com valor registrado;
 2. 480 kg, documento processando, confirmar sem inventar extração;
 3. 480 kg × 482 kg, usar 482 kg;
 4. 480 kg × 482 kg, manter 480 kg com justificativa;
-5. upload falha, tentar novamente;
-6. upload falha, continuar sem documento;
-7. refresh durante o fluxo e retomada do estado correto;
-8. acesso a movimento já `posted` não permite edição.
+5. upload falha e é repetido;
+6. upload falha e operador continua sem documento;
+7. refresh em Dados/Comprovação/Conferência e retomada correta;
+8. movimento `posted` não reabre para edição.
 
-## 16. Critérios de aceite
+## 19. Critérios de aceite
 
-O incremento só pode ser considerado concluído quando:
+O incremento só está concluído quando:
 
-- todas as telas REC-03A até REC-05 do Screen Map estiverem representadas por rotas/estados reproduzíveis;
-- o shell continuar obedecendo ao VERDIS UI SYSTEM V1.1;
-- nenhum processamento saudável gerar pendência indevida;
-- dados documentais nunca sobrescreverem silenciosamente dados registrados;
-- divergência exigir decisão explícita;
-- justificativa for obrigatória no caminho homologado de manutenção do valor registrado;
-- confirmação for atômica;
-- estoque mudar somente no `posted`;
-- o arquivo original permanecer preservado;
-- refresh/reentrada não destruir o rascunho;
-- testes unitários, typecheck, build e database tests passarem no CI.
+- REC-03A até REC-05 são reproduzíveis por rotas/estados;
+- o shell permanece aderente ao VERDIS UI SYSTEM V1.1;
+- processamento saudável não gera pendência;
+- dados documentais nunca sobrescrevem silenciosamente dados registrados;
+- divergência exige decisão explícita;
+- manter valor registrado exige justificativa no caminho homologado;
+- confirmação é atômica;
+- estoque muda somente no `posted`;
+- original permanece preservado;
+- refresh/reentrada preserva a operação;
+- unit tests, typecheck, build e database tests passam no CI.
 
-## 17. Fora de escopo deste incremento
+## 20. Fora de escopo
 
 - fluxo profundo de Vendas;
 - mobile;
-- OCR/provider final de produção;
-- classificação sofisticada de documentos;
+- provedor final de OCR/IA de produção;
 - SINIR/MTR/CDF;
 - auditoria ambiental/legal;
 - assinatura digital;
 - upload global fora de uma movimentação;
 - dashboards ESG expandidos.
 
-## 18. Decisão final do design
+## 21. Decisão final do design
 
-O fluxo profundo de Recebimentos será implementado como um vertical slice persistente sobre o domínio existente, com UI state local apenas para transições efêmeras e fatos duráveis persistidos em `movements`, `documents`, `document_extractions`, `evidences` e `validations`.
+O fluxo profundo de Recebimentos será um vertical slice persistente sobre o domínio existente. Estados efêmeros ficam na UI; fatos duráveis ficam em `movements`, `documents`, `document_extractions`, `evidences` e `validations`.
 
-A confirmação será a única fronteira que efetiva estoque, executada de forma transacional e compatível com os triggers já existentes.
+`confirm_receipt_m1(...)` é a fronteira atômica de confirmação. O estoque continua derivado exclusivamente da transição `draft → posted` e dos triggers já existentes.
