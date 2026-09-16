@@ -48,11 +48,21 @@ function toIso(local: string): string {
 }
 
 function formFromDraft(draft: ReceiptDraftRecord): FormState {
-  return { origin: draft.sourceCounterpartyId ?? '', material: draft.materialId, quantityKg: String(draft.quantityKg), occurredAtLocal: toLocalDatetime(draft.occurredAt) }
+  return {
+    origin: draft.sourceCounterpartyId ?? '',
+    material: draft.materialId,
+    quantityKg: String(draft.quantityKg),
+    occurredAtLocal: toLocalDatetime(draft.occurredAt),
+  }
 }
 
 function draftInput(form: FormState): ReceiptDraftInput {
-  return { sourceCounterpartyId: form.origin.trim() || null, materialId: form.material.trim(), quantityKg: Number(form.quantityKg), occurredAt: toIso(form.occurredAtLocal) }
+  return {
+    sourceCounterpartyId: form.origin.trim() || null,
+    materialId: form.material.trim(),
+    quantityKg: Number(form.quantityKg),
+    occurredAt: toIso(form.occurredAtLocal),
+  }
 }
 
 function formatKg(value: number, sign = false) {
@@ -62,7 +72,20 @@ function formatKg(value: number, sign = false) {
 
 function ReceiptStepper({ activeStep }: { activeStep: ReceiptResumeStep }) {
   const activeIndex = STEPS.findIndex((step) => step.key === activeStep)
-  return <ol className="v-receipt-stepper" aria-label="Etapas do recebimento">{STEPS.map((step, index) => <li key={step.key} className={`v-receipt-stepper__item ${index <= activeIndex ? 'is-active' : ''}`} aria-current={step.key === activeStep ? 'step' : undefined}><span className="v-receipt-stepper__number">{index + 1}</span><span>{step.label}</span></li>)}</ol>
+  return (
+    <ol className="v-receipt-stepper" aria-label="Etapas do recebimento">
+      {STEPS.map((step, index) => (
+        <li
+          key={step.key}
+          className={`v-receipt-stepper__item ${index <= activeIndex ? 'is-active' : ''}`}
+          aria-current={step.key === activeStep ? 'step' : undefined}
+        >
+          <span className="v-receipt-stepper__number">{index + 1}</span>
+          <span>{step.label}</span>
+        </li>
+      ))}
+    </ol>
+  )
 }
 
 export function ReceiptFlowPage({ movementId }: ReceiptFlowPageProps) {
@@ -87,16 +110,27 @@ export function ReceiptFlowPage({ movementId }: ReceiptFlowPageProps) {
     let cancelled = false
     if (!movementId || !activeScope) {
       setDraftLoading(false)
-      if (!movementId) { setDraft(null); setForm(EMPTY_FORM) }
+      if (!movementId) {
+        setDraft(null)
+        setForm(EMPTY_FORM)
+      }
       return () => { cancelled = true }
     }
     setDraftLoading(true)
     setErrorMessage(null)
-    void getReceiptDraft(movementId, activeScope).then((nextDraft) => {
-      if (!cancelled) { setDraft(nextDraft); setForm(formFromDraft(nextDraft)) }
-    }).catch((cause) => {
-      if (!cancelled) setErrorMessage(cause instanceof Error ? cause.message : 'Não foi possível carregar o recebimento.')
-    }).finally(() => { if (!cancelled) setDraftLoading(false) })
+    void getReceiptDraft(movementId, activeScope)
+      .then((nextDraft) => {
+        if (!cancelled) {
+          setDraft(nextDraft)
+          setForm(formFromDraft(nextDraft))
+        }
+      })
+      .catch((cause) => {
+        if (!cancelled) setErrorMessage(cause instanceof Error ? cause.message : 'Não foi possível carregar o recebimento.')
+      })
+      .finally(() => {
+        if (!cancelled) setDraftLoading(false)
+      })
     return () => { cancelled = true }
   }, [movementId, activeScope])
 
@@ -105,41 +139,73 @@ export function ReceiptFlowPage({ movementId }: ReceiptFlowPageProps) {
     if (effectiveStep !== 'conferencia' || !movementId || !activeScope) return () => { cancelled = true }
     setConferenceLoading(true)
     setErrorMessage(null)
-    void loadReceiptConference(movementId, activeScope).then((nextConference) => {
-      if (!cancelled) { setConference(nextConference); setDecision(null); setReason('') }
-    }).catch((cause) => {
-      if (!cancelled) setErrorMessage(cause instanceof Error ? cause.message : 'Não foi possível conferir o recebimento.')
-    }).finally(() => { if (!cancelled) setConferenceLoading(false) })
+    void loadReceiptConference(movementId, activeScope)
+      .then((nextConference) => {
+        if (!cancelled) {
+          setConference(nextConference)
+          setDecision(null)
+          setReason('')
+        }
+      })
+      .catch((cause) => {
+        if (!cancelled) setErrorMessage(cause instanceof Error ? cause.message : 'Não foi possível conferir o recebimento.')
+      })
+      .finally(() => {
+        if (!cancelled) setConferenceLoading(false)
+      })
     return () => { cancelled = true }
   }, [effectiveStep, movementId, activeScope])
 
   const quantityKg = Number(form.quantityKg)
-  const formValid = Boolean(form.origin.trim() && form.material.trim() && Number.isFinite(quantityKg) && quantityKg > 0 && form.occurredAtLocal)
+  const formValid = Boolean(
+    form.origin.trim() &&
+      form.material.trim() &&
+      Number.isFinite(quantityKg) &&
+      quantityKg > 0 &&
+      form.occurredAtLocal,
+  )
+
   const conferenceDecision = useMemo<ReceiptDecision | null>(() => {
     if (!conference) return null
     return conference.state === 'divergence' ? decision : 'registered_only'
   }, [conference, decision])
-  const confirmDisabled = submitting || conferenceDecision === null || (conferenceDecision !== null && requiresReceiptJustification(conferenceDecision) && !reason.trim())
 
-  function setField(field: keyof FormState, value: string) { setForm((current) => ({ ...current, [field]: value })) }
+  const hasDivergence = conference?.state === 'divergence'
+  const confirmDisabled =
+    submitting ||
+    conferenceDecision === null ||
+    (conferenceDecision !== null &&
+      requiresReceiptJustification(conferenceDecision, hasDivergence) &&
+      !reason.trim())
+
+  function setField(field: keyof FormState, value: string) {
+    setForm((current) => ({ ...current, [field]: value }))
+  }
 
   async function handleDataContinue(event: FormEvent) {
     event.preventDefault()
     if (!activeScope || !formValid || submitting) return
-    setSubmitting(true); setErrorMessage(null)
+    setSubmitting(true)
+    setErrorMessage(null)
     try {
       const input = draftInput(form)
       let nextMovementId = movementId
       if (!nextMovementId) nextMovementId = (await createReceiptDraft(activeScope, input)).id
       else await updateReceiptDraft(nextMovementId, activeScope, input)
       navigate(`/recebimentos/novo/${nextMovementId}?step=comprovacao`)
-    } catch (cause) { setErrorMessage(cause instanceof Error ? cause.message : 'Não foi possível salvar o rascunho.') }
-    finally { setSubmitting(false) }
+    } catch (cause) {
+      setErrorMessage(cause instanceof Error ? cause.message : 'Não foi possível salvar o rascunho.')
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   function handleFileSelected(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0]
-    if (file) { setUploadState({ kind: 'selected', file }); setErrorMessage(null) }
+    if (file) {
+      setUploadState({ kind: 'selected', file })
+      setErrorMessage(null)
+    }
   }
 
   async function handleUpload() {
@@ -147,71 +213,220 @@ export function ReceiptFlowPage({ movementId }: ReceiptFlowPageProps) {
     const file = uploadState.file
     setUploadState({ kind: 'uploading', file })
     try {
-      const result = await uploadReceiptEvidence({ scope: activeScope, movementId, file, claimedQuantityKg: Number(form.quantityKg) })
+      const result = await uploadReceiptEvidence({
+        scope: activeScope,
+        movementId,
+        file,
+        claimedQuantityKg: Number(form.quantityKg),
+      })
       setUploadState({ kind: 'uploaded', filename: result.originalFilename })
       setConference(await loadReceiptConference(movementId, activeScope))
     } catch (cause) {
-      setUploadState({ kind: 'failed', file, message: cause instanceof Error ? cause.message : 'Falha no envio' })
+      setUploadState({
+        kind: 'failed',
+        file,
+        message: cause instanceof Error ? cause.message : 'Falha no envio',
+      })
     }
   }
 
   async function handleConfirm() {
     if (!movementId || !conference || !conferenceDecision || confirmDisabled) return
-    setSubmitting(true); setErrorMessage(null)
+    setSubmitting(true)
+    setErrorMessage(null)
     try {
-      const result = await confirmReceipt({ movementId, decision: conferenceDecision, evidenceId: conference.evidenceId, reason: requiresReceiptJustification(conferenceDecision) ? reason.trim() : null })
+      const result = await confirmReceipt({
+        movementId,
+        decision: conferenceDecision,
+        evidenceId: conference.evidenceId,
+        reason: requiresReceiptJustification(
+          conferenceDecision,
+          conference.state === 'divergence',
+        )
+          ? reason.trim()
+          : null,
+      })
       setConfirmation(result)
       navigate(`/recebimentos/novo/${movementId}?step=concluir`)
-    } catch (cause) { setErrorMessage(cause instanceof Error ? cause.message : 'Não foi possível confirmar o recebimento.') }
-    finally { setSubmitting(false) }
+    } catch (cause) {
+      setErrorMessage(cause instanceof Error ? cause.message : 'Não foi possível confirmar o recebimento.')
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   if (scopeLoading || draftLoading) return <div className="v-receipt-panel">Carregando recebimento...</div>
   if (scopeError) return <div className="v-receipt-panel">Não foi possível carregar o contexto operacional.</div>
   if (!activeScope) return <div className="v-receipt-panel">Selecione um contexto operacional para continuar.</div>
 
-  return <div className="v-page-grid" data-testid="receipt-flow-page">
-    <div><Breadcrumb items={[{ label: 'Início', href: '/' }, { label: 'Recebimentos', href: '/recebimentos' }, { label: movementId ? 'Recebimento' : 'Novo recebimento' }]} /><PageHeader title={effectiveStep === 'concluir' ? 'Recebimento concluído' : 'Novo recebimento'} description="Registre a entrada e mantenha a comprovação vinculada à movimentação." /></div>
-    <ReceiptStepper activeStep={effectiveStep} />
-    {errorMessage ? <div className="v-receipt-alert v-receipt-alert--error">{errorMessage}</div> : null}
+  return (
+    <div className="v-page-grid" data-testid="receipt-flow-page">
+      <div>
+        <Breadcrumb
+          items={[
+            { label: 'Início', href: '/' },
+            { label: 'Recebimentos', href: '/recebimentos' },
+            { label: movementId ? 'Recebimento' : 'Novo recebimento' },
+          ]}
+        />
+        <PageHeader
+          title={effectiveStep === 'concluir' ? 'Recebimento concluído' : 'Novo recebimento'}
+          description="Registre a entrada e mantenha a comprovação vinculada à movimentação."
+        />
+      </div>
 
-    {effectiveStep === 'dados' ? <form className="v-receipt-panel" onSubmit={handleDataContinue}>
-      <div className="v-receipt-panel__heading"><div><span className="v-receipt-eyebrow">ETAPA 1 DE 4</span><h2>Dados do recebimento</h2></div><StatusBadge tone="neutral">Rascunho</StatusBadge></div>
-      <div className="v-receipt-form-grid">
-        <label className="v-field">Origem<input className="v-control" value={form.origin} onChange={(event) => setField('origin', event.target.value)} placeholder="Empresa, cooperativa ou fornecedor" /></label>
-        <label className="v-field">Material<input className="v-control" value={form.material} onChange={(event) => setField('material', event.target.value)} placeholder="Material recebido" /></label>
-        <label className="v-field">Peso/quantidade<input className="v-control" inputMode="decimal" type="number" min="0" step="0.01" value={form.quantityKg} onChange={(event) => setField('quantityKg', event.target.value)} /></label>
-        <label className="v-field">Data e hora<input className="v-control" type="datetime-local" value={form.occurredAtLocal} onChange={(event) => setField('occurredAtLocal', event.target.value)} /></label>
-      </div><div className="v-receipt-actions"><Button type="submit" disabled={!formValid || submitting}>{submitting ? 'SALVANDO...' : 'CONTINUAR'}</Button></div>
-    </form> : null}
+      <ReceiptStepper activeStep={effectiveStep} />
+      {errorMessage ? <div className="v-receipt-alert v-receipt-alert--error">{errorMessage}</div> : null}
 
-    {effectiveStep === 'comprovacao' ? <section className="v-receipt-panel">
-      <div className="v-receipt-panel__heading"><div><span className="v-receipt-eyebrow">ETAPA 2 DE 4</span><h2>Comprovação</h2><p>Associe uma evidência ao recebimento ou prossiga sem documento.</p></div></div>
-      <div className="v-receipt-summary"><span>Quantidade registrada</span><strong>{formatKg(Number(form.quantityKg) || draft?.quantityKg || 0)}</strong></div>
-      <input ref={cameraInputRef} className="v-visually-hidden" aria-label="Tirar foto" type="file" accept="image/*" capture="environment" onChange={handleFileSelected} />
-      {uploadState.kind === 'none' ? <div className="v-receipt-upload"><label className="v-button v-button--secondary" htmlFor="receipt-file-input">ENVIAR ARQUIVO</label><input id="receipt-file-input" className="v-visually-hidden" aria-label="Enviar arquivo" type="file" accept="image/*,.pdf" onChange={handleFileSelected} /><Button variant="secondary" type="button" onClick={() => cameraInputRef.current?.click()}>TIRAR FOTO</Button></div> : null}
-      {uploadState.kind === 'selected' ? <div className="v-receipt-document-card"><div><strong>{uploadState.file.name}</strong><span>Pronto para enviar · {uploadState.file.type || 'arquivo'}</span></div><Button type="button" onClick={() => void handleUpload()}>ENVIAR DOCUMENTO</Button></div> : null}
-      {uploadState.kind === 'uploading' ? <div className="v-receipt-document-card"><div><strong>{uploadState.file.name}</strong><span>Enviando...</span></div><StatusBadge tone="processing">Enviando</StatusBadge></div> : null}
-      {uploadState.kind === 'uploaded' ? <div className="v-receipt-document-card"><div><strong>{uploadState.filename}</strong><span>Documento enviado</span></div><StatusBadge tone="processing">Processando</StatusBadge></div> : null}
-      {uploadState.kind === 'failed' ? <div className="v-receipt-upload-failure"><div><strong>Falha no envio</strong><p>{uploadState.message}</p><span>{uploadState.file.name}</span></div><div className="v-receipt-inline-actions"><Button type="button" onClick={() => void handleUpload()}>TENTAR NOVAMENTE</Button><label className="v-button v-button--secondary" htmlFor="receipt-file-replace">Trocar arquivo</label><input id="receipt-file-replace" className="v-visually-hidden" aria-label="Trocar arquivo" type="file" accept="image/*,.pdf" onChange={handleFileSelected} /><Button variant="secondary" type="button" onClick={() => cameraInputRef.current?.click()}>Tirar outra foto</Button></div></div> : null}
-      <div className="v-receipt-actions v-receipt-actions--spread"><Button variant="tertiary" type="button" onClick={() => movementId && navigate(`/recebimentos/novo/${movementId}?step=conferencia`)}>CONTINUAR SEM DOCUMENTO</Button><Button type="button" disabled={uploadState.kind !== 'uploaded'} onClick={() => movementId && navigate(`/recebimentos/novo/${movementId}?step=conferencia`)}>CONTINUAR</Button></div>
-    </section> : null}
+      {effectiveStep === 'dados' ? (
+        <form className="v-receipt-panel" onSubmit={handleDataContinue}>
+          <div className="v-receipt-panel__heading">
+            <div>
+              <span className="v-receipt-eyebrow">ETAPA 1 DE 4</span>
+              <h2>Dados do recebimento</h2>
+            </div>
+            <StatusBadge tone="neutral">Rascunho</StatusBadge>
+          </div>
+          <div className="v-receipt-form-grid">
+            <label className="v-field">Origem<input className="v-control" value={form.origin} onChange={(event) => setField('origin', event.target.value)} placeholder="Empresa, cooperativa ou fornecedor" /></label>
+            <label className="v-field">Material<input className="v-control" value={form.material} onChange={(event) => setField('material', event.target.value)} placeholder="Material recebido" /></label>
+            <label className="v-field">Peso/quantidade<input className="v-control" inputMode="decimal" type="number" min="0" step="0.01" value={form.quantityKg} onChange={(event) => setField('quantityKg', event.target.value)} /></label>
+            <label className="v-field">Data e hora<input className="v-control" type="datetime-local" value={form.occurredAtLocal} onChange={(event) => setField('occurredAtLocal', event.target.value)} /></label>
+          </div>
+          <div className="v-receipt-actions">
+            <Button type="submit" disabled={!formValid || submitting}>{submitting ? 'SALVANDO...' : 'CONTINUAR'}</Button>
+          </div>
+        </form>
+      ) : null}
 
-    {effectiveStep === 'conferencia' ? <section className="v-receipt-panel">
-      <div className="v-receipt-panel__heading"><div><span className="v-receipt-eyebrow">ETAPA 3 DE 4</span><h2>Conferência</h2><p>Confira o registro antes de confirmar a entrada no estoque.</p></div></div>
-      {conferenceLoading || !conference ? <p>Carregando conferência...</p> : <>
-        <div className="v-receipt-comparison"><div><span>Informado</span><strong>{formatKg(conference.registeredQuantityKg)}</strong></div>{conference.documentQuantityKg !== null ? <div><span>{`Documento ${formatKg(conference.documentQuantityKg)}`}</span><strong>{conference.document?.filename ?? 'Documento'}</strong></div> : null}</div>
-        {conference.state === 'processing' ? <div className="v-receipt-alert"><strong>{conference.document ? 'Documento em processamento' : 'Sem documento vinculado'}</strong><p>O recebimento pode ser confirmado com os dados registrados.</p></div> : null}
-        {conference.state === 'match' ? <div className="v-receipt-alert v-receipt-alert--positive"><strong>Dados coincidentes</strong><p>O peso do documento coincide com o peso informado.</p></div> : null}
-        {conference.state === 'divergence' && conference.documentQuantityKg !== null ? <div className="v-receipt-divergence"><div className="v-receipt-alert"><strong>Divergência de quantidade</strong><p>{formatKg(conference.differenceKg ?? 0, true)} / {new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(conference.differencePercent ?? 0)}%</p></div><fieldset className="v-receipt-decisions"><legend>Qual quantidade deve ser adotada?</legend><label><input type="radio" name="receipt-decision" checked={decision === 'use_document'} onChange={() => { setDecision('use_document'); setReason('') }} />{`USAR ${formatKg(conference.documentQuantityKg).toUpperCase()}`}</label><label><input type="radio" name="receipt-decision" checked={decision === 'keep_registered'} onChange={() => setDecision('keep_registered')} />{`MANTER ${formatKg(conference.registeredQuantityKg).toUpperCase()}`}</label></fieldset>{decision === 'keep_registered' ? <label className="v-field">Justificativa<textarea className="v-control v-receipt-textarea" value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Explique por que o valor registrado será mantido." /></label> : null}</div> : null}
-        <div className="v-receipt-actions"><Button type="button" disabled={confirmDisabled} onClick={() => void handleConfirm()}>{submitting ? 'CONFIRMANDO...' : 'CONFIRMAR RECEBIMENTO'}</Button></div>
-      </>}
-    </section> : null}
+      {effectiveStep === 'comprovacao' ? (
+        <section className="v-receipt-panel">
+          <div className="v-receipt-panel__heading">
+            <div>
+              <span className="v-receipt-eyebrow">ETAPA 2 DE 4</span>
+              <h2>Comprovação</h2>
+              <p>Associe uma evidência ao recebimento ou prossiga sem documento.</p>
+            </div>
+          </div>
+          <div className="v-receipt-summary">
+            <span>Quantidade registrada</span>
+            <strong>{formatKg(Number(form.quantityKg) || draft?.quantityKg || 0)}</strong>
+          </div>
+          <input ref={cameraInputRef} className="v-visually-hidden" aria-label="Tirar foto" type="file" accept="image/*" capture="environment" onChange={handleFileSelected} />
+          {uploadState.kind === 'none' ? (
+            <div className="v-receipt-upload">
+              <label className="v-button v-button--secondary" htmlFor="receipt-file-input">ENVIAR ARQUIVO</label>
+              <input id="receipt-file-input" className="v-visually-hidden" aria-label="Enviar arquivo" type="file" accept="image/*,.pdf" onChange={handleFileSelected} />
+              <Button variant="secondary" type="button" onClick={() => cameraInputRef.current?.click()}>TIRAR FOTO</Button>
+            </div>
+          ) : null}
+          {uploadState.kind === 'selected' ? (
+            <div className="v-receipt-document-card">
+              <div><strong>{uploadState.file.name}</strong><span>Pronto para enviar · {uploadState.file.type || 'arquivo'}</span></div>
+              <Button type="button" onClick={() => void handleUpload()}>ENVIAR DOCUMENTO</Button>
+            </div>
+          ) : null}
+          {uploadState.kind === 'uploading' ? (
+            <div className="v-receipt-document-card">
+              <div><strong>{uploadState.file.name}</strong><span>Enviando...</span></div>
+              <StatusBadge tone="processing">Enviando</StatusBadge>
+            </div>
+          ) : null}
+          {uploadState.kind === 'uploaded' ? (
+            <div className="v-receipt-document-card">
+              <div><strong>{uploadState.filename}</strong><span>Documento enviado</span></div>
+              <StatusBadge tone="processing">Processando</StatusBadge>
+            </div>
+          ) : null}
+          {uploadState.kind === 'failed' ? (
+            <div className="v-receipt-upload-failure">
+              <div><strong>Falha no envio</strong><p>{uploadState.message}</p><span>{uploadState.file.name}</span></div>
+              <div className="v-receipt-inline-actions">
+                <Button type="button" onClick={() => void handleUpload()}>TENTAR NOVAMENTE</Button>
+                <label className="v-button v-button--secondary" htmlFor="receipt-file-replace">Trocar arquivo</label>
+                <input id="receipt-file-replace" className="v-visually-hidden" aria-label="Trocar arquivo" type="file" accept="image/*,.pdf" onChange={handleFileSelected} />
+                <Button variant="secondary" type="button" onClick={() => cameraInputRef.current?.click()}>Tirar outra foto</Button>
+              </div>
+            </div>
+          ) : null}
+          <div className="v-receipt-actions v-receipt-actions--spread">
+            <Button variant="tertiary" type="button" onClick={() => movementId && navigate(`/recebimentos/novo/${movementId}?step=conferencia`)}>CONTINUAR SEM DOCUMENTO</Button>
+            <Button type="button" disabled={uploadState.kind !== 'uploaded'} onClick={() => movementId && navigate(`/recebimentos/novo/${movementId}?step=conferencia`)}>CONTINUAR</Button>
+          </div>
+        </section>
+      ) : null}
 
-    {effectiveStep === 'concluir' ? <section className="v-receipt-panel v-receipt-complete">
-      <div className="v-receipt-panel__heading"><div><span className="v-receipt-eyebrow">ETAPA 4 DE 4</span><h2>Recebimento concluído</h2><p>A entrada foi registrada. O estoque é calculado a partir das movimentações confirmadas.</p></div><StatusBadge tone="positive">Concluído</StatusBadge></div>
-      {confirmation ? <div className="v-receipt-stock-equation"><div><span>Saldo anterior</span><strong>{formatKg(confirmation.previousStockKg)}</strong></div><span className="v-receipt-equation-symbol">+</span><div><span>Entrada confirmada</span><strong>{formatKg(confirmation.adoptedQuantityKg, true)}</strong></div><span className="v-receipt-equation-symbol">=</span><div><span>Novo saldo</span><strong>{formatKg(confirmation.newStockKg)}</strong></div></div> : <div className="v-receipt-alert"><strong>Movimentação já confirmada</strong><p>Os dados persistidos deste recebimento permanecem disponíveis no histórico operacional.</p></div>}
-      <div className="v-receipt-actions v-receipt-actions--spread"><Button variant="secondary" type="button" onClick={() => navigate('/recebimentos')}>VER MOVIMENTAÇÃO</Button><Button type="button" onClick={() => navigate('/recebimentos/novo?step=dados')}>RECEBER OUTRO MATERIAL</Button></div>
-    </section> : null}
-  </div>
+      {effectiveStep === 'conferencia' ? (
+        <section className="v-receipt-panel">
+          <div className="v-receipt-panel__heading">
+            <div>
+              <span className="v-receipt-eyebrow">ETAPA 3 DE 4</span>
+              <h2>Conferência</h2>
+              <p>Confira o registro antes de confirmar a entrada no estoque.</p>
+            </div>
+          </div>
+          {conferenceLoading || !conference ? <p>Carregando conferência...</p> : (
+            <>
+              <div className="v-receipt-comparison">
+                <div><span>Informado</span><strong>{formatKg(conference.registeredQuantityKg)}</strong></div>
+                {conference.documentQuantityKg !== null ? (
+                  <div><span>{`Documento ${formatKg(conference.documentQuantityKg)}`}</span><strong>{conference.document?.filename ?? 'Documento'}</strong></div>
+                ) : null}
+              </div>
+              {conference.state === 'processing' ? (
+                <div className="v-receipt-alert"><strong>{conference.document ? 'Documento em processamento' : 'Sem documento vinculado'}</strong><p>O recebimento pode ser confirmado com os dados registrados.</p></div>
+              ) : null}
+              {conference.state === 'match' ? (
+                <div className="v-receipt-alert v-receipt-alert--positive"><strong>Dados coincidentes</strong><p>O peso do documento coincide com o peso informado.</p></div>
+              ) : null}
+              {conference.state === 'divergence' && conference.documentQuantityKg !== null ? (
+                <div className="v-receipt-divergence">
+                  <div className="v-receipt-alert"><strong>Divergência de quantidade</strong><p>{formatKg(conference.differenceKg ?? 0, true)} / {new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(conference.differencePercent ?? 0)}%</p></div>
+                  <fieldset className="v-receipt-decisions">
+                    <legend>Qual quantidade deve ser adotada?</legend>
+                    <label><input type="radio" name="receipt-decision" checked={decision === 'use_document'} onChange={() => { setDecision('use_document'); setReason('') }} />{`USAR ${formatKg(conference.documentQuantityKg).toUpperCase()}`}</label>
+                    <label><input type="radio" name="receipt-decision" checked={decision === 'keep_registered'} onChange={() => setDecision('keep_registered')} />{`MANTER ${formatKg(conference.registeredQuantityKg).toUpperCase()}`}</label>
+                  </fieldset>
+                  {decision === 'keep_registered' ? (
+                    <label className="v-field">Justificativa<textarea className="v-control v-receipt-textarea" value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Explique por que o valor registrado será mantido." /></label>
+                  ) : null}
+                </div>
+              ) : null}
+              <div className="v-receipt-actions">
+                <Button type="button" disabled={confirmDisabled} onClick={() => void handleConfirm()}>{submitting ? 'CONFIRMANDO...' : 'CONFIRMAR RECEBIMENTO'}</Button>
+              </div>
+            </>
+          )}
+        </section>
+      ) : null}
+
+      {effectiveStep === 'concluir' ? (
+        <section className="v-receipt-panel v-receipt-complete">
+          <div className="v-receipt-panel__heading">
+            <div>
+              <span className="v-receipt-eyebrow">ETAPA 4 DE 4</span>
+              <h2>Resumo do recebimento</h2>
+              <p>A entrada foi registrada. O estoque é calculado a partir das movimentações confirmadas.</p>
+            </div>
+            <StatusBadge tone="positive">Concluído</StatusBadge>
+          </div>
+          {confirmation ? (
+            <div className="v-receipt-stock-equation">
+              <div><span>Saldo anterior</span><strong>{formatKg(confirmation.previousStockKg)}</strong></div>
+              <span className="v-receipt-equation-symbol">+</span>
+              <div><span>Entrada confirmada</span><strong>{formatKg(confirmation.adoptedQuantityKg, true)}</strong></div>
+              <span className="v-receipt-equation-symbol">=</span>
+              <div><span>Novo saldo</span><strong>{formatKg(confirmation.newStockKg)}</strong></div>
+            </div>
+          ) : (
+            <div className="v-receipt-alert"><strong>Movimentação já confirmada</strong><p>Os dados persistidos deste recebimento permanecem disponíveis no histórico operacional.</p></div>
+          )}
+          <div className="v-receipt-actions v-receipt-actions--spread">
+            <Button variant="secondary" type="button" onClick={() => navigate('/recebimentos')}>VER MOVIMENTAÇÃO</Button>
+            <Button type="button" onClick={() => navigate('/recebimentos/novo?step=dados')}>RECEBER OUTRO MATERIAL</Button>
+          </div>
+        </section>
+      ) : null}
+    </div>
+  )
 }
