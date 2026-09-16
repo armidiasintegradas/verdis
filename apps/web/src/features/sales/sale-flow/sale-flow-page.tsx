@@ -76,7 +76,7 @@ export function SaleFlowPage({ movementId }: SaleFlowPageProps) {
   const [submitting, setSubmitting] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const cameraInputRef = useRef<HTMLInputElement | null>(null)
-  const effectiveStep = allowedSaleStep({ requestedStep, movementStatus: draft?.status ?? (movementId ? 'draft' : null) })
+  const effectiveStep = allowedSaleStep({ requestedStep, movementStatus: confirmation ? 'posted' : draft?.status ?? (movementId ? 'draft' : null) })
 
   useEffect(() => {
     let cancelled = false
