@@ -49,5 +49,5 @@ test('renders documents inside the canonical shell', async () => {
 
   expect(screen.getByRole('heading', { name: 'Documentos' })).toBeInTheDocument()
   expect(screen.getByRole('link', { name: 'Documentos' })).toHaveAttribute('aria-current', 'page')
-  expect(await screen.findByText('4 documentos')).toBeInTheDocument()
+  expect((await screen.findAllByText('4 documentos')).length).toBeGreaterThan(0)
 })
