@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, expect, test, vi } from 'vitest'
 import { RouterProvider, useRouter } from './router'
-import { AppRoutes, matchReceiptFlowPath } from './routes'
+import { AppRoutes, matchReceiptFlowPath, matchSaleFlowPath } from './routes'
 
 vi.mock('@/features/scope/scope-selector', () => ({
   ScopeSelector: () => <span>Cooperativa Demo · M1 Pilot</span>,
@@ -10,6 +10,12 @@ vi.mock('@/features/scope/scope-selector', () => ({
 vi.mock('@/features/receipts/receipt-flow/receipt-flow-page', () => ({
   ReceiptFlowPage: ({ movementId }: { movementId: string | null }) => (
     <div data-testid="receipt-flow-page">{movementId ?? 'bootstrap'}</div>
+  ),
+}))
+
+vi.mock('@/features/sales/sale-flow/sale-flow-page', () => ({
+  SaleFlowPage: ({ movementId }: { movementId: string | null }) => (
+    <div data-testid="sale-flow-page">{movementId ?? 'bootstrap'}</div>
   ),
 }))
 
@@ -60,7 +66,6 @@ test('separates pathname and search from the initial path', () => {
       <RouterProbe />
     </RouterProvider>,
   )
-
   expect(screen.getByTestId('location')).toHaveTextContent('/recebimentos/novo?step=dados')
 })
 
@@ -70,28 +75,17 @@ test('navigate updates pathname and search together', () => {
       <RouterProbe />
     </RouterProvider>,
   )
-
   fireEvent.click(screen.getByRole('button', { name: 'navegar' }))
-
-  expect(screen.getByTestId('location')).toHaveTextContent(
-    '/recebimentos/novo/abc?step=comprovacao',
-  )
+  expect(screen.getByTestId('location')).toHaveTextContent('/recebimentos/novo/abc?step=comprovacao')
 })
 
 test('popstate reads browser pathname and search', () => {
   window.history.replaceState({}, '', '/recebimentos?from=home')
-
-  render(
-    <RouterProvider>
-      <RouterProbe />
-    </RouterProvider>,
-  )
-
+  render(<RouterProvider><RouterProbe /></RouterProvider>)
   act(() => {
     window.history.pushState({}, '', '/vendas?tab=hoje')
     window.dispatchEvent(new PopStateEvent('popstate'))
   })
-
   expect(screen.getByTestId('location')).toHaveTextContent('/vendas?tab=hoje')
 })
 
@@ -106,7 +100,7 @@ test.each([
   '/recebimentos/novo/abc/extra',
   '/recebimentos/novos',
   '/recebimentos',
-])('rejects non-flow path %s', (pathname) => {
+])('rejects non-flow receipt path %s', (pathname) => {
   expect(matchReceiptFlowPath(pathname)).toBeNull()
 })
 
@@ -114,11 +108,29 @@ test.each([
   ['/recebimentos/novo?step=dados', 'bootstrap'],
   ['/recebimentos/novo/abc?step=comprovacao', 'abc'],
 ] as const)('renders the receipt flow route for %s', (path, expectedMovement) => {
-  render(
-    <RouterProvider initialPath={path}>
-      <AppRoutes />
-    </RouterProvider>,
-  )
-
+  render(<RouterProvider initialPath={path}><AppRoutes /></RouterProvider>)
   expect(screen.getByTestId('receipt-flow-page')).toHaveTextContent(expectedMovement)
+})
+
+test.each([
+  ['/vendas/nova', null],
+  ['/vendas/nova/abc', 'abc'],
+] as const)('matches sale flow path %s', (pathname, movementId) => {
+  expect(matchSaleFlowPath(pathname)).toEqual({ movementId })
+})
+
+test.each([
+  '/vendas/nova/abc/extra',
+  '/vendas/novas',
+  '/vendas',
+])('rejects non-flow sale path %s', (pathname) => {
+  expect(matchSaleFlowPath(pathname)).toBeNull()
+})
+
+test.each([
+  ['/vendas/nova?step=dados', 'bootstrap'],
+  ['/vendas/nova/abc?step=comprovacao', 'abc'],
+] as const)('renders the sale flow route for %s', (path, expectedMovement) => {
+  render(<RouterProvider initialPath={path}><AppRoutes /></RouterProvider>)
+  expect(screen.getByTestId('sale-flow-page')).toHaveTextContent(expectedMovement)
 })
