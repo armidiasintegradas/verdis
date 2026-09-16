@@ -54,6 +54,10 @@ function renderFlow(path: string) {
   return render(<RouterProvider initialPath={path}><FlowHarness /></RouterProvider>)
 }
 
+function expectPageText(text: string) {
+  expect(document.body.textContent?.replace(/\s+/g, ' ')).toContain(text)
+}
+
 function fillData(overrides: { quantity?: string; price?: string } = {}) {
   fireEvent.change(screen.getByLabelText('Comprador'), { target: { value: 'Comprador Demo' } })
   fireEvent.change(screen.getByLabelText('Material'), { target: { value: 'PET' } })
@@ -74,6 +78,18 @@ function draft(status: 'draft' | 'posted' = 'draft', availableStockKg = 3200) {
     totalAmount: 3100,
     soldAt: '2026-09-15T21:35:00.000Z',
     availableStockKg,
+  }
+}
+
+function registeredOnlyConference() {
+  return {
+    movementId,
+    state: 'registered_only' as const,
+    registered: { quantityKg: 1000, unitPrice: 3.1, totalAmount: 3100 },
+    documentary: null,
+    differences: null,
+    evidenceId: null,
+    document: null,
   }
 }
 
@@ -110,7 +126,7 @@ beforeEach(() => {
   mocks.updateSaleDraft.mockResolvedValue({ movementId, saleId: 'sale-id', totalAmount: 3100 })
   mocks.getSaleDraft.mockResolvedValue(draft())
   mocks.uploadSaleEvidence.mockResolvedValue({ documentId: 'document-id', evidenceId, originalFilename: 'Documento_Venda_1279.pdf' })
-  mocks.loadSaleConference.mockResolvedValue(processingConference())
+  mocks.loadSaleConference.mockResolvedValue(registeredOnlyConference())
   mocks.confirmSale.mockResolvedValue({
     movementId, saleId: 'sale-id', adoptedQuantityKg: 1000, adoptedUnitPrice: 3.1,
     adoptedTotalAmount: 3100, previousStockKg: 3200, newStockKg: 2200,
@@ -133,7 +149,7 @@ describe('SaleFlowPage', () => {
   it('shows canonical total and stock projection and creates the draft', async () => {
     renderFlow('/vendas/nova?step=dados')
     fillData()
-    expect(screen.getByText('R$ 3.100,00')).toBeInTheDocument()
+    expectPageText('R$ 3.100,00')
     fireEvent.click(screen.getByRole('button', { name: 'CONTINUAR' }))
     await waitFor(() => expect(mocks.createSaleDraft).toHaveBeenCalled())
     expect(screen.getByTestId('location')).toHaveTextContent(`/vendas/nova/${movementId}?step=comprovacao`)
@@ -144,7 +160,7 @@ describe('SaleFlowPage', () => {
     renderFlow(`/vendas/nova/${movementId}?step=dados`)
     await screen.findByRole('heading', { name: 'Dados da venda' })
     fireEvent.change(screen.getByLabelText('Quantidade'), { target: { value: '400' } })
-    expect(screen.getByText('R$ 1.240,00')).toBeInTheDocument()
+    expectPageText('R$ 1.240,00')
     expect(screen.getByText('Indisponível')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'CONTINUAR' })).toBeDisabled()
   })
@@ -161,9 +177,10 @@ describe('SaleFlowPage', () => {
   })
 
   it('allows conference while the document is processing using registered values', async () => {
+    mocks.loadSaleConference.mockResolvedValue(processingConference())
     renderFlow(`/vendas/nova/${movementId}?step=conferencia`)
     expect(await screen.findByText('Documento em processamento')).toBeInTheDocument()
-    expect(screen.getByText('R$ 3,10/kg')).toBeInTheDocument()
+    expectPageText('R$ 3,10/kg')
     expect(screen.getByRole('button', { name: 'CONFIRMAR VENDA' })).toBeEnabled()
   })
 
@@ -180,9 +197,10 @@ describe('SaleFlowPage', () => {
   it('renders 3.10 vs 3.20 divergence with no decision preselected', async () => {
     mocks.loadSaleConference.mockResolvedValue(divergenceConference())
     renderFlow(`/vendas/nova/${movementId}?step=conferencia`)
-    expect(await screen.findByText('R$ 3,20/kg')).toBeInTheDocument()
-    expect(screen.getByText('+R$ 100,00')).toBeInTheDocument()
-    expect(screen.getByText('+3,23%')).toBeInTheDocument()
+    await screen.findByText('Divergência comercial')
+    expectPageText('R$ 3,20/kg')
+    expectPageText('+R$ 100,00')
+    expectPageText('+3,23%')
     expect(screen.getByRole('radio', { name: 'USAR VALORES DO DOCUMENTO' })).not.toBeChecked()
     expect(screen.getByRole('radio', { name: 'MANTER VALORES REGISTRADOS' })).not.toBeChecked()
   })
@@ -207,7 +225,7 @@ describe('SaleFlowPage', () => {
     expect(screen.getByText('3.200 kg')).toBeInTheDocument()
     expect(screen.getByText('-1.000 kg')).toBeInTheDocument()
     expect(screen.getByText('2.200 kg')).toBeInTheDocument()
-    expect(screen.getByText('R$ 3.100,00')).toBeInTheDocument()
+    expectPageText('R$ 3.100,00')
   })
 
   it('forces a posted sale to Concluir and loads durable completion after refresh', async () => {
