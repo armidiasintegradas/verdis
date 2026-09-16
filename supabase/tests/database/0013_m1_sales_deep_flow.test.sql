@@ -3,7 +3,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set local search_path = public, extensions;
 
-select plan(18);
+select plan(19);
 
 insert into auth.users (
   id, instance_id, aud, role, email,
@@ -182,7 +182,7 @@ select is(
 );
 
 select is(
-  (select reason from public.validations where movement_id = (select movement_id from sale_ids) and validation_type = 'operator_resolution'),
+  (select reason from public.validations where movement_id = (select sale_id from sale_ids) and validation_type = 'operator_resolution'),
   'Preço negociado confirmado pela equipe comercial.',
   'keep_registered persists the justification'
 );
