@@ -9,6 +9,7 @@ export type DemoMovement = {
   counterparty: string
   occurredAtLabel: string
   documentStatus?: DemoDocumentStatus | 'pendente' | 'sem_documento'
+  documentLabel?: string
   issue?: DemoMovementIssue
   valueLabel?: string
   unitPriceLabel?: string
@@ -51,6 +52,7 @@ export const receiptMovements: DemoMovement[] = [
     counterparty: 'Empresa Demo',
     occurredAtLabel: 'Hoje · 14:32',
     documentStatus: 'processado',
+    documentLabel: 'Ticket #009182 anexo',
     issue: 'divergencia_peso',
   },
   {
@@ -61,6 +63,7 @@ export const receiptMovements: DemoMovement[] = [
     counterparty: 'Empresa Demo',
     occurredAtLabel: 'Hoje · 09:18',
     documentStatus: 'processado',
+    documentLabel: 'Ticket #009177 conferido',
   },
   {
     id: '1282',
@@ -70,6 +73,7 @@ export const receiptMovements: DemoMovement[] = [
     counterparty: 'Empresa Demo',
     occurredAtLabel: 'Ontem · 16:45',
     documentStatus: 'sem_documento',
+    documentLabel: 'Pendente de digitalização',
   },
   {
     id: '1281',
@@ -79,6 +83,7 @@ export const receiptMovements: DemoMovement[] = [
     counterparty: 'Fornecedor Demo',
     occurredAtLabel: 'Ontem · 13:10',
     documentStatus: 'processado',
+    documentLabel: 'Ticket #009160 verificado',
   },
 ]
 
@@ -91,6 +96,7 @@ export const saleMovements: DemoMovement[] = [
     counterparty: 'Comprador Demo',
     occurredAtLabel: 'Hoje · 14:00',
     documentStatus: 'pendente',
+    documentLabel: 'Documento pendente',
     valueLabel: 'R$ 3.720,00',
     unitPriceLabel: 'R$ 3,10 / kg',
   },
@@ -102,6 +108,7 @@ export const saleMovements: DemoMovement[] = [
     counterparty: 'Comprador Demo',
     occurredAtLabel: 'Hoje · 10:20',
     documentStatus: 'processado',
+    documentLabel: 'Documento processado',
     valueLabel: 'R$ 325,00',
     unitPriceLabel: 'R$ 0,65 / kg',
   },
@@ -113,6 +120,7 @@ export const saleMovements: DemoMovement[] = [
     counterparty: 'Comprador Demo',
     occurredAtLabel: 'Ontem · 11:15',
     documentStatus: 'processado',
+    documentLabel: 'Documento processado',
     valueLabel: 'R$ 325,00',
     unitPriceLabel: 'R$ 0,65 / kg',
   },
