@@ -1,3 +1,4 @@
+import { useRouter } from '@/app/router'
 import { Breadcrumb } from '@/ui/components/breadcrumb'
 import { Button } from '@/ui/components/button'
 import { FilterBar } from '@/ui/components/filter-bar'
@@ -43,6 +44,8 @@ function movementStatus(movement: DemoMovement) {
 }
 
 export function ReceiptsPage() {
+  const { navigate } = useRouter()
+
   return (
     <div className="v-page-grid">
       <div>
@@ -50,7 +53,7 @@ export function ReceiptsPage() {
         <PageHeader
           title="Recebimentos"
           description="Entradas de materiais registradas na unidade operacional."
-          action={<Button>+ RECEBER MATERIAL</Button>}
+          action={<Button onClick={() => navigate('/recebimentos/novo?step=dados')}>+ RECEBER MATERIAL</Button>}
         />
       </div>
 
