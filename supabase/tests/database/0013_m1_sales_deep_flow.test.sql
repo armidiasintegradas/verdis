@@ -92,6 +92,8 @@ where s.buyer_counterparty_id = '26000000-0000-0000-0000-000000000001'
 order by s.created_at
 limit 1;
 
+grant select on sale_ids to authenticated;
+
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '21000000-0000-0000-0000-000000000001', true);
 select lives_ok(
