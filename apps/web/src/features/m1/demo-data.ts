@@ -1,4 +1,5 @@
 export type DemoDocumentStatus = 'processado' | 'processando'
+export type DemoMovementIssue = 'divergencia_peso' | 'divergencia_comercial'
 
 export type DemoMovement = {
   id: string
@@ -8,6 +9,7 @@ export type DemoMovement = {
   counterparty: string
   occurredAtLabel: string
   documentStatus?: DemoDocumentStatus | 'pendente' | 'sem_documento'
+  issue?: DemoMovementIssue
   valueLabel?: string
   unitPriceLabel?: string
 }
@@ -48,7 +50,8 @@ export const receiptMovements: DemoMovement[] = [
     quantityKg: 480,
     counterparty: 'Empresa Demo',
     occurredAtLabel: 'Hoje · 14:32',
-    documentStatus: 'pendente',
+    documentStatus: 'processado',
+    issue: 'divergencia_peso',
   },
   {
     id: '1283',
