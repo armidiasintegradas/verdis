@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, expect, test, vi } from 'vitest'
 import { RouterProvider, useRouter } from './router'
-import { AppRoutes, matchReceiptFlowPath, matchSaleFlowPath } from './routes'
+import { AppRoutes, matchDocumentDetailPath, matchReceiptFlowPath, matchSaleFlowPath } from './routes'
 
 vi.mock('@/features/scope/scope-selector', () => ({
   ScopeSelector: () => <span>Cooperativa Demo · M1 Pilot</span>,
@@ -16,6 +16,12 @@ vi.mock('@/features/receipts/receipt-flow/receipt-flow-page', () => ({
 vi.mock('@/features/sales/sale-flow/sale-flow-page', () => ({
   SaleFlowPage: ({ movementId }: { movementId: string | null }) => (
     <div data-testid="sale-flow-page">{movementId ?? 'bootstrap'}</div>
+  ),
+}))
+
+vi.mock('@/features/documents/document-detail-page', () => ({
+  DocumentDetailPage: ({ documentId }: { documentId: string }) => (
+    <div data-testid="document-detail-page">{documentId}</div>
   ),
 }))
 
@@ -133,4 +139,15 @@ test.each([
 ] as const)('renders the sale flow route for %s', (path, expectedMovement) => {
   render(<RouterProvider initialPath={path}><AppRoutes /></RouterProvider>)
   expect(screen.getByTestId('sale-flow-page')).toHaveTextContent(expectedMovement)
+})
+
+test('matches one document detail path segment', () => {
+  expect(matchDocumentDetailPath('/documentos/document-id')).toEqual({ documentId: 'document-id' })
+  expect(matchDocumentDetailPath('/documentos')).toBeNull()
+  expect(matchDocumentDetailPath('/documentos/a/b')).toBeNull()
+})
+
+test('renders the document detail route directly', () => {
+  render(<RouterProvider initialPath="/documentos/document-id"><AppRoutes /></RouterProvider>)
+  expect(screen.getByTestId('document-detail-page')).toHaveTextContent('document-id')
 })
