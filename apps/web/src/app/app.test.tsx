@@ -1,7 +1,13 @@
 import { render, screen } from '@testing-library/react'
-import { App } from './app'
+import { RouterProvider } from './router'
+import { AppRoutes } from './routes'
 
-test('renders Verdis core shell', () => {
-  render(<App />)
-  expect(screen.getByRole('heading', { name: /verdis core/i })).toBeInTheDocument()
+test('renders the documents route', () => {
+  render(
+    <RouterProvider initialPath="/documentos">
+      <AppRoutes />
+    </RouterProvider>,
+  )
+
+  expect(screen.getByRole('heading', { name: 'Documentos' })).toBeInTheDocument()
 })
