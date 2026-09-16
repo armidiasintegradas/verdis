@@ -12,7 +12,13 @@ import {
 
 type RouterContextValue = {
   pathname: string
+  search: string
   navigate: (to: string) => void
+}
+
+type RouterLocation = {
+  pathname: string
+  search: string
 }
 
 const RouterContext = createContext<RouterContextValue | null>(null)
@@ -22,32 +28,57 @@ type RouterProviderProps = {
   initialPath?: string
 }
 
+function parseLocation(to: string, base: string): RouterLocation {
+  const url = new URL(to, base)
+  return { pathname: url.pathname, search: url.search }
+}
+
+function browserLocation(): RouterLocation {
+  return {
+    pathname: window.location.pathname || '/',
+    search: window.location.search,
+  }
+}
+
 export function RouterProvider({ children, initialPath }: RouterProviderProps) {
-  const [pathname, setPathname] = useState(
-    () => initialPath ?? window.location.pathname ?? '/',
+  const [location, setLocation] = useState<RouterLocation>(() =>
+    initialPath
+      ? parseLocation(initialPath, 'http://verdis.local')
+      : browserLocation(),
   )
 
   useEffect(() => {
     if (initialPath) return undefined
 
-    const handlePopState = () => setPathname(window.location.pathname)
+    const handlePopState = () => setLocation(browserLocation())
     window.addEventListener('popstate', handlePopState)
     return () => window.removeEventListener('popstate', handlePopState)
   }, [initialPath])
 
   const navigate = useCallback(
     (to: string) => {
-      if (to === pathname) return
+      const next = parseLocation(
+        to,
+        initialPath ? 'http://verdis.local' : window.location.origin,
+      )
+
+      if (next.pathname === location.pathname && next.search === location.search) {
+        return
+      }
 
       if (!initialPath) {
-        window.history.pushState({}, '', to)
+        window.history.pushState({}, '', `${next.pathname}${next.search}`)
       }
-      setPathname(to)
+
+      setLocation(next)
     },
-    [initialPath, pathname],
+    [initialPath, location.pathname, location.search],
   )
 
-  const value = useMemo(() => ({ pathname, navigate }), [pathname, navigate])
+  const value = useMemo(
+    () => ({ pathname: location.pathname, search: location.search, navigate }),
+    [location.pathname, location.search, navigate],
+  )
 
   return <RouterContext.Provider value={value}>{children}</RouterContext.Provider>
 }
