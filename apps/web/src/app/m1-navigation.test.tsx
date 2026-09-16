@@ -1,5 +1,6 @@
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, expect, test, vi } from 'vitest'
+import { ScopeProvider, type ScopeMembership } from '@/features/scope/scope-provider'
 import { RouterProvider, useRouter } from './router'
 import { AppRoutes, matchDocumentDetailPath, matchReceiptFlowPath, matchSaleFlowPath } from './routes'
 
@@ -25,6 +26,14 @@ vi.mock('@/features/documents/document-detail-page', () => ({
   ),
 }))
 
+const membership: ScopeMembership = {
+  membershipId: 'membership-id',
+  roleId: 'role-id',
+  tenantId: 'tenant-id',
+  organizationId: 'org-id',
+  unitId: 'unit-id',
+}
+
 const cases = [
   ['/', 'Início'],
   ['/recebimentos', 'Recebimentos'],
@@ -39,10 +48,16 @@ beforeEach(() => {
 })
 
 test.each(cases)('renders %s with the correct active navigation item', (path, label) => {
-  render(
+  const routes = (
     <RouterProvider initialPath={path}>
       <AppRoutes />
-    </RouterProvider>,
+    </RouterProvider>
+  )
+
+  render(
+    path === '/documentos'
+      ? <ScopeProvider loadMemberships={async () => [membership]}>{routes}</ScopeProvider>
+      : routes,
   )
 
   expect(screen.getByRole('heading', { name: label })).toBeInTheDocument()
