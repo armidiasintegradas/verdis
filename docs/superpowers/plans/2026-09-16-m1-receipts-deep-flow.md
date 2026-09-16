@@ -4,7 +4,7 @@
 
 **Goal:** Implementar o fluxo persistente de Recebimentos do M1, de rascunho até confirmação, com documento/evidência, divergência, decisão humana, retomada após refresh e efeito de estoque somente em `draft → posted`.
 
-**Architecture:** O frontend mantém apenas estados transitórios do wizard e persiste fatos duráveis em Supabase. `movements` é a fonte operacional da quantidade adotada, `documents` preserva o original, `document_extractions` guarda leitura append-only, `evidences` liga declarado e extraído, `validations` registra decisão humana e o RPC `confirm_receipt_m1` efetiva atomicamente o recebimento. O trigger existente de `movements` continua sendo a única origem do lançamento em `stock_ledger_entries`.
+**Architecture:** O frontend persiste apenas fatos duráveis e mantém em memória estados transitórios do wizard. O upload grava o objeto no Storage e chama um RPC atômico para criar `documents + evidences`; a conferência consome extrações quando elas existirem; o RPC `confirm_receipt_m1` registra a decisão aplicável, atualiza a quantidade adotada antes do `posted` e deixa o trigger existente produzir o ledger. O produtor externo de IA/OCR não faz parte deste incremento: este slice apenas expõe e consome corretamente `document_extractions`/`evidences.extracted_fields` quando o pipeline assíncrono os preencher.
 
 **Tech Stack:** React 19, TypeScript 5.9, Vite 7, Supabase JS 2.57, PostgreSQL/Supabase, TanStack React Query 5, Zod 4, Vitest 3, Testing Library, pgTAP/Supabase DB tests, pnpm workspace.
 
@@ -17,12 +17,17 @@
 - O arquivo original é armazenado no bucket privado `evidence-documents` e nunca é silenciosamente substituído.
 - `Documento processado` e `divergência operacional` são dimensões independentes.
 - Extração automática nunca sobrescreve o valor originalmente informado.
-- Estados transitórios `SELECTED`, `UPLOADING` e erro momentâneo de rede permanecem na UI; o banco persiste somente fatos duráveis.
-- Divergência exige decisão humana explícita; manter o valor registrado no cenário homologado exige justificativa não vazia.
+- `SELECTED`, `UPLOADING` e erro momentâneo de rede são estados locais da UI, não colunas de domínio.
+- Divergência exige decisão explícita; `keep_registered` em divergência exige justificativa não vazia.
+- `registered_only` confirma com o dado registrado sem criar uma `validation` de divergência e sem elevar artificialmente o nível de evidência.
 - Somente `draft → posted` produz efeito de estoque; o frontend nunca insere diretamente em `stock_ledger_entries`.
-- A confirmação usa exatamente o RPC `confirm_receipt_m1` e deve ser transacional/idempotente contra dupla confirmação.
+- A confirmação usa exatamente o RPC `confirm_receipt_m1` e deve rejeitar segunda confirmação.
+- A criação de documento + evidência usa exatamente o RPC `register_receipt_evidence_document` para evitar documento órfão quando o vínculo falhar.
 - Processamento documental normal não gera pendência.
-- Não adicionar nova biblioteca de roteamento; reutilizar o router interno atual baseado em History API.
+- Não adicionar biblioteca de roteamento. O router interno atual será estendido para expor `pathname + search` e suportar um único parâmetro `:movementId`.
+- O bootstrap de um novo recebimento usa `/recebimentos/novo?step=dados`; depois que o primeiro `movement` é criado, a URL passa para `/recebimentos/novo/:movementId?step=comprovacao`.
+- A URL preserva a intenção de navegação no refresh, mas fatos persistidos sempre limitam quais passos são permitidos. Movimento `posted` sempre força `concluir`.
+- O produtor assíncrono de extração/IA é explicitamente fora do escopo deste incremento. Os testes de divergência inserem `document_extractions` e atualizam `evidences.extracted_fields` como fixture de pipeline concluído.
 - Cada tarefa segue TDD: teste falha → implementação mínima → teste passa → suíte relevante → commit.
 
 ---
@@ -30,201 +35,209 @@
 ## File Map
 
 ### Banco
-
-- Create: `supabase/migrations/0011_m1_receipts_deep_flow.sql` — RPC de confirmação e funções auxiliares estritamente necessárias.
-- Create: `supabase/tests/database/0012_m1_receipts_deep_flow.test.sql` — pgTAP para atomicidade, decisão, justificativa, estoque e dupla confirmação.
-- Modify/generated: `apps/web/src/lib/supabase/database.types.ts` — regenerado após migration; nunca editar manualmente.
+- Create: `supabase/migrations/0011_m1_receipts_deep_flow.sql`
+- Create: `supabase/tests/database/0012_m1_receipts_deep_flow.test.sql`
+- Regenerate: `apps/web/src/lib/supabase/database.types.ts`
 
 ### Domínio e serviços
+- Create: `apps/web/src/domain/receipt-flow.ts`
+- Test: `apps/web/src/domain/receipt-flow.test.ts`
+- Create: `apps/web/src/services/receipts/receipt-draft-service.ts`
+- Test: `apps/web/src/services/receipts/receipt-draft-service.test.ts`
+- Create: `apps/web/src/services/documents/upload-receipt-evidence.ts`
+- Test: `apps/web/src/services/documents/upload-receipt-evidence.test.ts`
+- Create: `apps/web/src/services/receipts/receipt-conference-service.ts`
+- Test: `apps/web/src/services/receipts/receipt-conference-service.test.ts`
+- Create: `apps/web/src/services/receipts/confirm-receipt-service.ts`
+- Test: `apps/web/src/services/receipts/confirm-receipt-service.test.ts`
 
-- Create: `apps/web/src/domain/receipt-flow.ts` — tipos/validators puros, cálculo de divergência e derivação do passo retomável.
-- Test: `apps/web/src/domain/receipt-flow.test.ts`.
-- Modify: `apps/web/src/services/movements/create-movement.ts` — manter criação genérica; não embutir UI.
-- Create: `apps/web/src/services/receipts/receipt-draft-service.ts` — create/update/load do draft de recebimento.
-- Test: `apps/web/src/services/receipts/receipt-draft-service.test.ts`.
-- Create: `apps/web/src/services/documents/upload-evidence-document.ts` — hash, storage, `documents` e `evidences`.
-- Test: `apps/web/src/services/documents/upload-evidence-document.test.ts`.
-- Create: `apps/web/src/services/receipts/receipt-conference-service.ts` — view model `processing | match | divergence`.
-- Test: `apps/web/src/services/receipts/receipt-conference-service.test.ts`.
-- Create: `apps/web/src/services/receipts/confirm-receipt-service.ts` — adapter TypeScript do RPC `confirm_receipt_m1`.
-- Test: `apps/web/src/services/receipts/confirm-receipt-service.test.ts`.
-
-### UI
-
-- Create: `apps/web/src/features/receipts/receipt-flow/receipt-flow-page.tsx` — orquestrador do wizard.
-- Create: `apps/web/src/features/receipts/receipt-flow/receipt-flow.css` — estilos específicos sem redefinir tokens globais.
-- Create: `apps/web/src/features/receipts/receipt-flow/receipt-stepper.tsx` — stepper reutilizável no fluxo.
-- Create: `apps/web/src/features/receipts/receipt-flow/receipt-data-step.tsx`.
-- Create: `apps/web/src/features/receipts/receipt-flow/receipt-evidence-step.tsx`.
-- Create: `apps/web/src/features/receipts/receipt-flow/receipt-conference-step.tsx`.
-- Create: `apps/web/src/features/receipts/receipt-flow/receipt-complete-step.tsx`.
-- Test: `apps/web/src/features/receipts/receipt-flow/receipt-flow-page.test.tsx`.
-- Modify: `apps/web/src/app/routes.tsx` — rotas `/recebimentos/novo/:movementId` e início de novo draft.
-- Modify: `apps/web/src/features/receipts/receipts-page.tsx` — CTA `+ RECEBER MATERIAL` entra no fluxo real.
+### UI / routing
+- Modify: `apps/web/src/app/router.tsx`
+- Modify: `apps/web/src/app/routes.tsx`
+- Modify: `apps/web/src/app/m1-navigation.test.tsx`
+- Modify: `apps/web/src/features/receipts/receipts-page.tsx`
+- Create: `apps/web/src/features/receipts/receipt-flow/receipt-flow-page.tsx`
+- Create: `apps/web/src/features/receipts/receipt-flow/receipt-stepper.tsx`
+- Create: `apps/web/src/features/receipts/receipt-flow/receipt-data-step.tsx`
+- Create: `apps/web/src/features/receipts/receipt-flow/receipt-evidence-step.tsx`
+- Create: `apps/web/src/features/receipts/receipt-flow/receipt-conference-step.tsx`
+- Create: `apps/web/src/features/receipts/receipt-flow/receipt-complete-step.tsx`
+- Create: `apps/web/src/features/receipts/receipt-flow/receipt-flow.css`
+- Test: `apps/web/src/features/receipts/receipt-flow/receipt-flow-page.test.tsx`
 
 ---
 
-### Task 1: Formalizar o domínio puro do fluxo de Recebimentos
+### Task 1: Domínio puro do fluxo
 
 **Files:**
 - Create: `apps/web/src/domain/receipt-flow.ts`
 - Test: `apps/web/src/domain/receipt-flow.test.ts`
 
-**Interfaces:**
-- Produces:
-  - `type ReceiptDecision = 'registered_only' | 'use_document' | 'keep_registered'`
-  - `type ReceiptConferenceState = 'processing' | 'match' | 'divergence'`
-  - `type ReceiptResumeStep = 'dados' | 'comprovacao' | 'conferencia' | 'concluir'`
-  - `calculateQuantityDifference(registeredKg: number, documentKg: number): { absoluteKg: number; percent: number }`
-  - `deriveConferenceState(input): ReceiptConferenceState`
-  - `requiresReceiptJustification(decision, hasDivergence): boolean`
-  - `deriveReceiptResumeStep(facts): ReceiptResumeStep`
+**Produces:**
 
-- [ ] **Step 1: Write the failing domain tests**
+```ts
+export type ReceiptDecision = 'registered_only' | 'use_document' | 'keep_registered'
+export type ReceiptConferenceState = 'processing' | 'match' | 'divergence'
+export type ReceiptStep = 'dados' | 'comprovacao' | 'conferencia' | 'concluir'
+
+export function calculateQuantityDifference(
+  registeredKg: number,
+  documentKg: number,
+): { absoluteKg: number; percent: number }
+
+export function deriveConferenceState(input: {
+  extractionFinished: boolean
+  registeredKg: number
+  documentKg: number | null
+}): ReceiptConferenceState
+
+export function requiresReceiptJustification(
+  decision: ReceiptDecision,
+  hasDivergence: boolean,
+): boolean
+
+export function allowedReceiptStep(input: {
+  requestedStep: ReceiptStep
+  movementStatus: 'draft' | 'posted' | 'voided' | null
+  hasDocument: boolean
+  extractionFinished: boolean
+  hasDivergence: boolean
+}): ReceiptStep
+```
+
+- [ ] **Step 1: Write failing tests**
 
 ```ts
 import { describe, expect, it } from 'vitest'
 import {
+  allowedReceiptStep,
   calculateQuantityDifference,
   deriveConferenceState,
-  deriveReceiptResumeStep,
   requiresReceiptJustification,
 } from './receipt-flow'
 
 describe('receipt flow domain', () => {
-  it('calculates the homologated 480kg x 482kg divergence', () => {
+  it('calculates 480kg x 482kg', () => {
     expect(calculateQuantityDifference(480, 482)).toEqual({
       absoluteKg: 2,
       percent: 0.4166666666666667,
     })
   })
 
-  it('does not invent extracted data while processing', () => {
-    expect(deriveConferenceState({ extractionFinished: false, registeredKg: 480, documentKg: null }))
-      .toBe('processing')
+  it('stays processing without extracted quantity', () => {
+    expect(deriveConferenceState({
+      extractionFinished: false,
+      registeredKg: 480,
+      documentKg: null,
+    })).toBe('processing')
   })
 
-  it('derives divergence only when processed values differ', () => {
-    expect(deriveConferenceState({ extractionFinished: true, registeredKg: 480, documentKg: 482 }))
-      .toBe('divergence')
+  it('derives divergence from processed values', () => {
+    expect(deriveConferenceState({
+      extractionFinished: true,
+      registeredKg: 480,
+      documentKg: 482,
+    })).toBe('divergence')
   })
 
-  it('requires justification only when keeping the registered value in divergence', () => {
+  it('requires justification only for keep_registered divergence', () => {
     expect(requiresReceiptJustification('keep_registered', true)).toBe(true)
     expect(requiresReceiptJustification('use_document', true)).toBe(false)
     expect(requiresReceiptJustification('registered_only', false)).toBe(false)
   })
 
-  it('prioritizes posted over every editable state during resume', () => {
-    expect(deriveReceiptResumeStep({
+  it('forces posted movements to concluir regardless of requested query step', () => {
+    expect(allowedReceiptStep({
+      requestedStep: 'dados',
       movementStatus: 'posted',
       hasDocument: true,
       extractionFinished: true,
       hasDivergence: true,
-      decision: null,
-      justificationRequired: false,
-      justificationPresent: false,
     })).toBe('concluir')
   })
 
-  it('resumes unresolved divergence at conference', () => {
-    expect(deriveReceiptResumeStep({
+  it('allows conferencia for a draft without document when URL already records that choice', () => {
+    expect(allowedReceiptStep({
+      requestedStep: 'conferencia',
       movementStatus: 'draft',
-      hasDocument: true,
-      extractionFinished: true,
-      hasDivergence: true,
-      decision: null,
-      justificationRequired: false,
-      justificationPresent: false,
+      hasDocument: false,
+      extractionFinished: false,
+      hasDivergence: false,
+    })).toBe('conferencia')
+  })
+
+  it('does not allow concluir for an unposted draft', () => {
+    expect(allowedReceiptStep({
+      requestedStep: 'concluir',
+      movementStatus: 'draft',
+      hasDocument: false,
+      extractionFinished: false,
+      hasDivergence: false,
     })).toBe('conferencia')
   })
 })
 ```
 
-- [ ] **Step 2: Run the test and verify RED**
-
-Run:
+- [ ] **Step 2: Verify RED**
 
 ```bash
 pnpm --filter @verdis/web test -- src/domain/receipt-flow.test.ts
 ```
 
-Expected: FAIL because `receipt-flow.ts` does not exist.
+Expected: FAIL because module does not exist.
 
-- [ ] **Step 3: Implement the minimal pure domain module**
+- [ ] **Step 3: Implement minimal pure functions**
 
-```ts
-export type ReceiptDecision = 'registered_only' | 'use_document' | 'keep_registered'
-export type ReceiptConferenceState = 'processing' | 'match' | 'divergence'
-export type ReceiptResumeStep = 'dados' | 'comprovacao' | 'conferencia' | 'concluir'
+Rules for `allowedReceiptStep`:
 
-export function calculateQuantityDifference(registeredKg: number, documentKg: number) {
-  const absoluteKg = documentKg - registeredKg
-  const percent = registeredKg === 0 ? 0 : (absoluteKg / registeredKg) * 100
-  return { absoluteKg, percent }
-}
-
-export function deriveConferenceState(input: {
-  extractionFinished: boolean
-  registeredKg: number
-  documentKg: number | null
-}): ReceiptConferenceState {
-  if (!input.extractionFinished || input.documentKg === null) return 'processing'
-  return input.documentKg === input.registeredKg ? 'match' : 'divergence'
-}
-
-export function requiresReceiptJustification(
-  decision: ReceiptDecision,
-  hasDivergence: boolean,
-) {
-  return hasDivergence && decision === 'keep_registered'
-}
-
-export function deriveReceiptResumeStep(input: {
-  movementStatus: 'draft' | 'posted' | 'voided'
-  hasDocument: boolean
-  extractionFinished: boolean
-  hasDivergence: boolean
-  decision: ReceiptDecision | null
-  justificationRequired: boolean
-  justificationPresent: boolean
-}): ReceiptResumeStep {
-  if (input.movementStatus === 'posted') return 'concluir'
-  if (input.movementStatus === 'voided') return 'concluir'
-  if (input.extractionFinished && input.hasDivergence && !input.decision) return 'conferencia'
-  if (input.decision === 'keep_registered' && input.justificationRequired && !input.justificationPresent) return 'conferencia'
-  if (input.hasDocument) return input.extractionFinished ? 'conferencia' : 'comprovacao'
-  return 'dados'
-}
+```text
+movementStatus = posted|voided -> concluir
+movementStatus = null -> dados
+requested concluir on draft -> conferencia
+requested conferencia on draft -> conferencia
+requested comprovacao on draft -> comprovacao
+requested dados on draft -> dados
 ```
 
-- [ ] **Step 4: Run domain tests GREEN**
+Do not infer an extraction that is not present.
+
+- [ ] **Step 4: Verify GREEN + typecheck**
 
 ```bash
 pnpm --filter @verdis/web test -- src/domain/receipt-flow.test.ts
-```
-
-Expected: PASS.
-
-- [ ] **Step 5: Run typecheck and commit**
-
-```bash
 pnpm --filter @verdis/web typecheck
+```
+
+- [ ] **Step 5: Commit**
+
+```bash
 git add apps/web/src/domain/receipt-flow.ts apps/web/src/domain/receipt-flow.test.ts
 git commit -m "feat(receipts): add receipt flow domain rules"
 ```
 
 ---
 
-### Task 2: Criar o RPC transacional `confirm_receipt_m1`
+### Task 2: Banco — registro atômico de documento/evidência e confirmação do recebimento
 
 **Files:**
 - Create: `supabase/migrations/0011_m1_receipts_deep_flow.sql`
 - Create: `supabase/tests/database/0012_m1_receipts_deep_flow.test.sql`
-- Generated: `apps/web/src/lib/supabase/database.types.ts`
+- Regenerate: `apps/web/src/lib/supabase/database.types.ts`
 
-**Interfaces:**
-- Produces SQL function:
+**Produces RPC 1:**
+
+```sql
+public.register_receipt_evidence_document(
+  p_movement_id uuid,
+  p_original_filename text,
+  p_mime_type text,
+  p_sha256 text,
+  p_storage_path text,
+  p_claimed_quantity_kg numeric
+) returns table(document_id uuid, evidence_id uuid)
+```
+
+**Produces RPC 2:**
 
 ```sql
 public.confirm_receipt_m1(
@@ -232,7 +245,7 @@ public.confirm_receipt_m1(
   p_decision text,
   p_evidence_id uuid default null,
   p_reason text default null
-) returns table (
+) returns table(
   movement_id uuid,
   adopted_quantity_kg numeric,
   previous_stock_kg numeric,
@@ -240,11 +253,42 @@ public.confirm_receipt_m1(
 )
 ```
 
-Allowed decisions: `registered_only`, `use_document`, `keep_registered`.
+- [ ] **Step 1: Write failing pgTAP tests before migration**
 
-- [ ] **Step 1: Write failing pgTAP coverage first**
+The fixture must create an authenticated actor with `movement.create`, `movement.read`, `evidence.upload`, `evidence.read`; create one `receipt` draft at `480kg`; and assert both RPCs do not exist yet.
 
-Create tests that seed one tenant/org/unit/material/user with permissions, create a `receipt` draft at `480`, and assert:
+Add exact behavior tests:
+
+```sql
+-- register RPC creates both durable rows in one transaction
+select lives_ok(
+  $$ select * from public.register_receipt_evidence_document(
+    :'receipt_id'::uuid,
+    'Ticket_009182.jpg',
+    'image/jpeg',
+    repeat('a', 64),
+    :'tenant_id' || '/' || :'org_id' || '/' || :'receipt_id' || '/ticket.jpg',
+    480
+  ) $$,
+  'document/evidence registration succeeds'
+);
+
+select is(
+  (select count(*)::int from public.documents where original_filename='Ticket_009182.jpg'),
+  1,
+  'document exists'
+);
+
+select is(
+  (select count(*)::int from public.evidences where movement_id=:'receipt_id'::uuid),
+  1,
+  'evidence link exists'
+);
+```
+
+Seed processed divergence by inserting a `document_extractions` row for the linked document and updating that evidence to `extracted_fields = '{"quantity_kg":482}'`.
+
+Then assert:
 
 ```sql
 select throws_ok(
@@ -257,221 +301,151 @@ select throws_ok(
   '.*justification.*',
   'keep_registered divergence requires justification'
 );
-
-select lives_ok(
-  $$ select * from public.confirm_receipt_m1(
-    :'receipt_id'::uuid,
-    'keep_registered',
-    :'evidence_id'::uuid,
-    'Quantidade operacional confirmada pela equipe.'
-  ) $$,
-  'valid keep_registered confirms receipt'
-);
-
-select is(
-  (select status::text from public.movements where id = :'receipt_id'::uuid),
-  'posted',
-  'receipt is posted'
-);
-
-select is(
-  (select count(*)::int from public.stock_ledger_entries where movement_id = :'receipt_id'::uuid),
-  1,
-  'posting creates exactly one stock ledger row'
-);
 ```
 
-Add independent fixture for `use_document` with `claimed_fields.quantity_kg = 480`, `extracted_fields.quantity_kg = 482` and assert movement becomes `482` before posting while original claim remains `480`.
+Create independent receipts for each confirmation path:
 
-Add second-call test asserting already-posted receipt is rejected and ledger count remains `1`.
+```text
+A registered_only, no evidence -> posted 480, ledger +480, zero operator_resolution validations
+B use_document, evidence 482 -> movement 482 then posted, ledger +482, validation rule RECEIPT_USE_DOCUMENT_QUANTITY
+C keep_registered, evidence 482 + reason -> movement 480 posted, ledger +480, validation rule RECEIPT_KEEP_REGISTERED_QUANTITY + reason
+D second confirmation on posted receipt -> rejected, ledger count remains 1
+E use_document with evidence but no document_extractions row -> rejected
+F evidence belonging to another movement -> rejected
+```
 
-- [ ] **Step 2: Run DB tests and verify RED**
+- [ ] **Step 2: Verify RED**
 
 ```bash
 supabase start
 supabase test db
 ```
 
-Expected: the new test fails because `confirm_receipt_m1` does not exist.
+Expected: new test fails because RPCs do not exist.
 
-- [ ] **Step 3: Implement migration with permission, scope and atomicity checks**
+- [ ] **Step 3: Implement `register_receipt_evidence_document`**
 
-The function must be `security definer`, set a safe search path, explicitly inspect `auth.uid()`, and rely on existing permission function:
+Required checks:
 
-```sql
-create or replace function public.confirm_receipt_m1(
-  p_movement_id uuid,
-  p_decision text,
-  p_evidence_id uuid default null,
-  p_reason text default null
-)
-returns table (
-  movement_id uuid,
-  adopted_quantity_kg numeric,
-  previous_stock_kg numeric,
-  new_stock_kg numeric
-)
-language plpgsql
-security definer
-set search_path = public, pg_temp
-as $$
-declare
-  v_user_id uuid := auth.uid();
-  v_movement public.movements;
-  v_evidence public.evidences;
-  v_document_quantity numeric;
-  v_previous_stock numeric;
-begin
-  if v_user_id is null then
-    raise exception 'authenticated user is required';
-  end if;
-
-  select * into v_movement
-  from public.movements
-  where id = p_movement_id
-  for update;
-
-  if v_movement.id is null then raise exception 'receipt not found'; end if;
-  if v_movement.movement_type <> 'receipt' then raise exception 'movement is not a receipt'; end if;
-  if v_movement.status <> 'draft' then raise exception 'receipt is not draft'; end if;
-
-  if not app_private.has_permission(
-    v_user_id,
-    v_movement.tenant_id,
-    v_movement.organization_id,
-    v_movement.unit_id,
-    'movement.create'
-  ) then
-    raise exception 'receipt confirmation is not authorized';
-  end if;
-
-  if p_decision not in ('registered_only','use_document','keep_registered') then
-    raise exception 'invalid receipt decision';
-  end if;
-
-  if p_decision in ('use_document','keep_registered') then
-    if p_evidence_id is null then raise exception 'evidence is required'; end if;
-
-    select * into v_evidence
-    from public.evidences
-    where id = p_evidence_id and movement_id = p_movement_id
-    for share;
-
-    if v_evidence.id is null then raise exception 'receipt evidence not found'; end if;
-
-    v_document_quantity := nullif(v_evidence.extracted_fields->>'quantity_kg','')::numeric;
-    if v_document_quantity is null or v_document_quantity <= 0 then
-      raise exception 'processed document quantity is required';
-    end if;
-  end if;
-
-  if p_decision = 'keep_registered'
-     and v_document_quantity is distinct from v_movement.quantity_kg
-     and nullif(btrim(coalesce(p_reason,'')), '') is null then
-    raise exception 'receipt justification is required';
-  end if;
-
-  v_previous_stock := app_private.current_stock_quantity(
-    v_movement.tenant_id,
-    v_movement.organization_id,
-    v_movement.unit_id,
-    v_movement.material_id
-  );
-
-  if p_decision = 'use_document' then
-    update public.movements
-    set quantity_kg = v_document_quantity
-    where id = p_movement_id;
-  end if;
-
-  insert into public.validations (
-    movement_id,
-    evidence_id,
-    validation_type,
-    status,
-    automated,
-    actor_user_id,
-    rule_code,
-    reason
-  ) values (
-    p_movement_id,
-    p_evidence_id,
-    'operator_resolution',
-    'accepted',
-    false,
-    v_user_id,
-    case p_decision
-      when 'use_document' then 'RECEIPT_USE_DOCUMENT_QUANTITY'
-      when 'keep_registered' then 'RECEIPT_KEEP_REGISTERED_QUANTITY'
-      else 'RECEIPT_REGISTERED_ONLY'
-    end,
-    nullif(btrim(coalesce(p_reason,'')), '')
-  );
-
-  update public.movements
-  set status = 'posted'
-  where id = p_movement_id;
-
-  return query
-  select
-    m.id,
-    m.quantity_kg,
-    v_previous_stock,
-    app_private.current_stock_quantity(m.tenant_id,m.organization_id,m.unit_id,m.material_id)
-  from public.movements m where m.id = p_movement_id;
-end;
-$$;
-
-revoke all on function public.confirm_receipt_m1(uuid,text,uuid,text) from public, anon;
-grant execute on function public.confirm_receipt_m1(uuid,text,uuid,text) to authenticated;
+```text
+auth.uid() exists
+movement exists, movement_type receipt, status draft
+movement scope matches storage path tenant/org prefixes
+actor has movement.read + evidence.upload for movement scope
+sha256 matches ^[0-9a-f]{64}$
+claimed quantity > 0
 ```
 
-Before accepting this implementation, verify the test fixture gives `movement.create` to the actor and that the existing triggers permit the draft quantity update before posting.
+Inside one PostgreSQL transaction/function call:
 
-- [ ] **Step 4: Run DB tests GREEN**
+```sql
+insert into public.documents (
+  tenant_id, organization_id, uploaded_by, document_type,
+  original_filename, mime_type, sha256, storage_bucket, storage_path,
+  extraction_status
+) values (
+  v_movement.tenant_id, v_movement.organization_id, v_user_id,
+  'receipt_evidence', p_original_filename, p_mime_type, p_sha256,
+  'evidence-documents', p_storage_path, 'pending'
+) returning id into v_document_id;
+
+insert into public.evidences (
+  movement_id, document_id, evidence_type,
+  claimed_fields, extracted_fields, status, created_by
+) values (
+  p_movement_id, v_document_id, 'receipt_document',
+  jsonb_build_object('quantity_kg', p_claimed_quantity_kg),
+  '{}'::jsonb, 'pending', v_user_id
+) returning id into v_evidence_id;
+```
+
+Return both IDs. Grant execute only to `authenticated`.
+
+- [ ] **Step 4: Implement `confirm_receipt_m1`**
+
+Required sequence:
+
+```text
+1 auth.uid() present
+2 SELECT movement FOR UPDATE
+3 movement is receipt + draft
+4 actor has movement.create in exact scope
+5 decision in registered_only|use_document|keep_registered
+6 registered_only: p_evidence_id must be null; do not create validation
+7 use_document|keep_registered:
+   - evidence belongs to movement
+   - evidence has document_id
+   - at least one document_extractions row exists for that document
+   - extracted_fields.quantity_kg exists and > 0
+8 keep_registered with different quantity requires nonblank reason
+9 read previous stock
+10 use_document updates draft quantity before posting
+11 divergence decisions insert accepted operator_resolution validation
+12 update movement status posted
+13 trigger creates ledger
+14 return adopted quantity, previous stock, new stock
+```
+
+Validation insert only for `use_document` or `keep_registered`:
+
+```sql
+insert into public.validations (
+  movement_id, evidence_id, document_id,
+  validation_type, status, automated, actor_user_id, rule_code, reason
+) values (
+  p_movement_id,
+  v_evidence.id,
+  v_evidence.document_id,
+  'operator_resolution',
+  'accepted',
+  false,
+  v_user_id,
+  case p_decision
+    when 'use_document' then 'RECEIPT_USE_DOCUMENT_QUANTITY'
+    else 'RECEIPT_KEEP_REGISTERED_QUANTITY'
+  end,
+  nullif(btrim(coalesce(p_reason,'')), '')
+);
+```
+
+`registered_only` posts without a validation row so an autodeclared receipt does not become `VALIDATED` merely because the operator confirmed it.
+
+- [ ] **Step 5: Verify DB GREEN**
 
 ```bash
 supabase test db
 ```
 
-Expected: all database tests pass, including `0012_m1_receipts_deep_flow.test.sql`.
+Expected: all DB tests pass.
 
-- [ ] **Step 5: Regenerate TypeScript DB types**
-
-Use the repository's existing generation command used by CI. If the repo script is direct Supabase CLI, run:
+- [ ] **Step 6: Regenerate DB types and verify generated contract**
 
 ```bash
 supabase gen types typescript --local > apps/web/src/lib/supabase/database.types.ts
-```
-
-Then verify:
-
-```bash
-git diff -- apps/web/src/lib/supabase/database.types.ts
-```
-
-Expected: `confirm_receipt_m1` appears under Functions with the exact arguments/return fields defined above.
-
-- [ ] **Step 6: Run web typecheck and commit**
-
-```bash
 pnpm --filter @verdis/web typecheck
+```
+
+Verify generated types contain both functions with exact argument names.
+
+- [ ] **Step 7: Commit**
+
+```bash
 git add supabase/migrations/0011_m1_receipts_deep_flow.sql \
   supabase/tests/database/0012_m1_receipts_deep_flow.test.sql \
   apps/web/src/lib/supabase/database.types.ts
-git commit -m "feat(receipts): add atomic receipt confirmation rpc"
+git commit -m "feat(receipts): add durable evidence and receipt confirmation rpcs"
 ```
 
 ---
 
-### Task 3: Implementar persistência do rascunho de Recebimento
+### Task 3: Serviço de rascunho de Recebimento
 
 **Files:**
 - Create: `apps/web/src/services/receipts/receipt-draft-service.ts`
 - Test: `apps/web/src/services/receipts/receipt-draft-service.test.ts`
-- Reuse: `apps/web/src/services/movements/create-movement.ts`
+- Reuse unchanged: `apps/web/src/services/movements/create-movement.ts`
 
-**Interfaces:**
+**Produces:**
 
 ```ts
 export type ReceiptDraftInput = {
@@ -481,16 +455,31 @@ export type ReceiptDraftInput = {
   sourceCounterpartyId: string | null
 }
 
-export async function createReceiptDraft(scope: ActiveScope, input: ReceiptDraftInput): Promise<{ id: string }>
-export async function updateReceiptDraft(movementId: string, scope: ActiveScope, input: ReceiptDraftInput): Promise<void>
-export async function getReceiptDraft(movementId: string, scope: ActiveScope): Promise<ReceiptDraftRecord>
+export type ReceiptDraftRecord = ReceiptDraftInput & {
+  id: string
+  status: 'draft' | 'posted' | 'voided'
+}
+
+export async function createReceiptDraft(
+  scope: ActiveScope,
+  input: ReceiptDraftInput,
+): Promise<{ id: string }>
+
+export async function updateReceiptDraft(
+  movementId: string,
+  scope: ActiveScope,
+  input: ReceiptDraftInput,
+): Promise<void>
+
+export async function getReceiptDraft(
+  movementId: string,
+  scope: ActiveScope,
+): Promise<ReceiptDraftRecord>
 ```
 
-- [ ] **Step 1: Write failing service tests with mocked Supabase**
+- [ ] **Step 1: Write RED tests with mocked Supabase/createMovement**
 
-Assert create maps to generic `createMovement` with `movementType: 'receipt'`; update refuses to target non-draft/non-receipt rows; load filters by active tenant/org/unit scope.
-
-Representative assertion:
+Assertions:
 
 ```ts
 expect(createMovement).toHaveBeenCalledWith(scope, {
@@ -502,19 +491,23 @@ expect(createMovement).toHaveBeenCalledWith(scope, {
 })
 ```
 
-- [ ] **Step 2: Run RED**
+Update query must filter exact `id`, tenant/org/unit scope, `movement_type='receipt'`, `status='draft'`.
+
+Load query must also scope by tenant/org/unit and select only wizard fields.
+
+- [ ] **Step 2: Verify RED**
 
 ```bash
 pnpm --filter @verdis/web test -- src/services/receipts/receipt-draft-service.test.ts
 ```
 
-- [ ] **Step 3: Implement minimal service**
+- [ ] **Step 3: Implement service**
 
-Create uses existing `createMovement`; update performs scoped `.update(...)` with `.eq('id', movementId).eq('movement_type','receipt').eq('status','draft')`; load selects only fields required by the wizard and throws a domain-safe error when absent.
+Create delegates to existing `createMovement`. Update changes only material, quantity, occurred_at and source_counterparty_id. Load returns a typed record or throws `Receipt draft not found`.
 
-Do not add step state columns to `movements`.
+Do not write workflow-step columns and do not post the movement here.
 
-- [ ] **Step 4: Run GREEN + typecheck**
+- [ ] **Step 4: Verify GREEN + typecheck**
 
 ```bash
 pnpm --filter @verdis/web test -- src/services/receipts/receipt-draft-service.test.ts
@@ -531,104 +524,96 @@ git commit -m "feat(receipts): persist receipt drafts"
 
 ---
 
-### Task 4: Implementar upload e vínculo de evidência sem perder o draft
+### Task 4: Serviço de upload com rollback de objeto quando o registro falhar
 
 **Files:**
-- Create: `apps/web/src/services/documents/upload-evidence-document.ts`
-- Test: `apps/web/src/services/documents/upload-evidence-document.test.ts`
+- Create: `apps/web/src/services/documents/upload-receipt-evidence.ts`
+- Test: `apps/web/src/services/documents/upload-receipt-evidence.test.ts`
 - Reuse: `apps/web/src/services/documents/hash-file.ts`
 
-**Interfaces:**
+**Produces:**
 
 ```ts
-export type UploadReceiptEvidenceInput = {
+export async function uploadReceiptEvidence(input: {
   scope: ActiveScope
   movementId: string
   file: File
   claimedQuantityKg: number
-}
-
-export async function uploadReceiptEvidence(input: UploadReceiptEvidenceInput): Promise<{
+}): Promise<{
   documentId: string
   evidenceId: string
   originalFilename: string
 }>
 ```
 
-- [ ] **Step 1: Write failing tests**
+- [ ] **Step 1: Write RED tests**
 
-Cover:
+Cover exact sequence:
 
-1. SHA-256 is calculated before upload.
-2. storage path is scoped as `${tenantId}/${organizationId}/${movementId}/${crypto.randomUUID()}-${safeFilename}`.
-3. storage upload success creates `documents`, then `evidences` with `claimed_fields: { quantity_kg }` and empty `extracted_fields`.
-4. storage failure throws without mutating the movement.
-5. if DB insert after storage fails, best-effort delete removes the just-uploaded object to avoid orphaned object; movement still remains untouched.
-
-- [ ] **Step 2: Run RED**
-
-```bash
-pnpm --filter @verdis/web test -- src/services/documents/upload-evidence-document.test.ts
+```text
+hash file
+get authenticated user
+build path tenant/org/movement/random-safe-filename
+upload to evidence-documents with upsert false
+call register_receipt_evidence_document RPC
+return ids
 ```
 
-- [ ] **Step 3: Implement upload service**
+Failure behavior:
 
-Core sequence:
+```text
+storage upload fails -> RPC is never called
+RPC fails after storage upload -> storage.remove([path]) is called once
+no movement update is ever issued by this service
+```
+
+- [ ] **Step 2: Verify RED**
+
+```bash
+pnpm --filter @verdis/web test -- src/services/documents/upload-receipt-evidence.test.ts
+```
+
+- [ ] **Step 3: Implement**
+
+Use `hashFile(file)` and sanitize filename to letters/numbers/dot/dash/underscore. Path:
 
 ```ts
-const sha256 = await hashFile(file)
-const path = buildEvidenceStoragePath(...)
-const { error: uploadError } = await supabase.storage.from('evidence-documents').upload(path, file, {
-  contentType: file.type || 'application/octet-stream',
-  upsert: false,
-})
-if (uploadError) throw uploadError
-
-try {
-  const { data: document, error: documentError } = await supabase
-    .from('documents')
-    .insert({
-      tenant_id: scope.tenantId,
-      organization_id: scope.organizationId,
-      uploaded_by: user.id,
-      document_type: 'receipt_evidence',
-      original_filename: file.name,
-      mime_type: file.type || 'application/octet-stream',
-      sha256,
-      storage_bucket: 'evidence-documents',
-      storage_path: path,
-      extraction_status: 'pending',
-    })
-    .select('id')
-    .single()
-
-  // then insert evidence with movement_id + claimed_fields
-} catch (error) {
-  await supabase.storage.from('evidence-documents').remove([path])
-  throw error
-}
+`${scope.tenantId}/${scope.organizationId}/${input.movementId}/${crypto.randomUUID()}-${safeFilename}`
 ```
 
-Do not update `movements.quantity_kg` here.
+After successful Storage upload:
 
-- [ ] **Step 4: Run GREEN + typecheck**
+```ts
+const { data, error } = await supabase.rpc('register_receipt_evidence_document', {
+  p_movement_id: input.movementId,
+  p_original_filename: input.file.name,
+  p_mime_type: input.file.type || 'application/octet-stream',
+  p_sha256: sha256,
+  p_storage_path: path,
+  p_claimed_quantity_kg: input.claimedQuantityKg,
+})
+```
+
+If the RPC throws/returns error, call Storage `.remove([path])`, then rethrow the registration error. Do not create `documents` directly in TypeScript.
+
+- [ ] **Step 4: Verify GREEN + typecheck**
 
 ```bash
-pnpm --filter @verdis/web test -- src/services/documents/upload-evidence-document.test.ts
+pnpm --filter @verdis/web test -- src/services/documents/upload-receipt-evidence.test.ts
 pnpm --filter @verdis/web typecheck
 ```
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add apps/web/src/services/documents/upload-evidence-document.ts \
-  apps/web/src/services/documents/upload-evidence-document.test.ts
-git commit -m "feat(receipts): upload and link receipt evidence"
+git add apps/web/src/services/documents/upload-receipt-evidence.ts \
+  apps/web/src/services/documents/upload-receipt-evidence.test.ts
+git commit -m "feat(receipts): upload receipt evidence safely"
 ```
 
 ---
 
-### Task 5: Montar o view model de Conferência e o adapter de confirmação
+### Task 5: Conferência e adapter de confirmação
 
 **Files:**
 - Create: `apps/web/src/services/receipts/receipt-conference-service.ts`
@@ -636,7 +621,7 @@ git commit -m "feat(receipts): upload and link receipt evidence"
 - Create: `apps/web/src/services/receipts/confirm-receipt-service.ts`
 - Test: `apps/web/src/services/receipts/confirm-receipt-service.test.ts`
 
-**Interfaces:**
+**Produces:**
 
 ```ts
 export type ReceiptConferenceViewModel = {
@@ -654,7 +639,10 @@ export type ReceiptConferenceViewModel = {
   }
 }
 
-export async function loadReceiptConference(movementId: string, scope: ActiveScope): Promise<ReceiptConferenceViewModel>
+export async function loadReceiptConference(
+  movementId: string,
+  scope: ActiveScope,
+): Promise<ReceiptConferenceViewModel>
 
 export async function confirmReceipt(input: {
   movementId: string
@@ -669,18 +657,20 @@ export async function confirmReceipt(input: {
 }>
 ```
 
-- [ ] **Step 1: Write conference tests**
+- [ ] **Step 1: Write RED conference tests**
 
-Cover:
+Scenarios:
 
-- document exists with `extraction_status = pending` and no extraction → `processing`, `documentQuantityKg = null`;
-- extraction/evidence contains `480` → `match`;
-- extraction/evidence contains `482` against registered `480` → `divergence`, `2`, `0.4166…`;
-- service never falls back to invented values from fixtures.
+```text
+document exists + no extraction -> processing, no documentQuantityKg
+evidence extracted 480 vs registered 480 -> match
+evidence extracted 482 vs registered 480 -> divergence, +2, +0.4166...
+no document -> processing view model is not fabricated; evidenceId null
+```
 
-- [ ] **Step 2: Write confirm adapter tests**
+The service must query movement in active scope, then latest linked evidence/document. It may read latest `document_extractions` only to decide `extractionFinished`; numeric comparison comes from `evidences.extracted_fields.quantity_kg` so the UI consumes the reconciled evidence representation rather than provider raw JSON.
 
-Assert exact RPC invocation:
+- [ ] **Step 2: Write RED confirmation adapter tests**
 
 ```ts
 expect(supabase.rpc).toHaveBeenCalledWith('confirm_receipt_m1', {
@@ -691,9 +681,9 @@ expect(supabase.rpc).toHaveBeenCalledWith('confirm_receipt_m1', {
 })
 ```
 
-Map nullable/numeric RPC output to TypeScript numbers and surface errors without extra stock writes.
+Assert the adapter performs no direct movement or stock mutation.
 
-- [ ] **Step 3: Run RED**
+- [ ] **Step 3: Verify RED**
 
 ```bash
 pnpm --filter @verdis/web test -- \
@@ -701,13 +691,11 @@ pnpm --filter @verdis/web test -- \
   src/services/receipts/confirm-receipt-service.test.ts
 ```
 
-- [ ] **Step 4: Implement both services using domain helpers from Task 1**
+- [ ] **Step 4: Implement both services with Task 1 helpers**
 
-`receipt-conference-service.ts` must read scoped `movements`, linked `evidences`, `documents`, and latest extraction/evidence data. Prefer already-materialized `evidences.extracted_fields`; when empty and document is still pending, return `processing`.
+`loadReceiptConference` returns `processing` whenever there is no actual extraction result. `confirmReceipt` only calls the RPC and normalizes numeric return values to JS numbers.
 
-`confirm-receipt-service.ts` must only call the RPC; no `.update('movements')` and no stock mutation in TypeScript.
-
-- [ ] **Step 5: Run GREEN + typecheck**
+- [ ] **Step 5: Verify GREEN + typecheck**
 
 ```bash
 pnpm --filter @verdis/web test -- \
@@ -728,23 +716,91 @@ git commit -m "feat(receipts): add conference and confirmation services"
 
 ---
 
-### Task 6: Implementar o wizard profundo de Recebimentos no VERDIS UI SYSTEM V1.1
+### Task 6: Router com query string e parâmetro de movimento
 
 **Files:**
-- Create: `apps/web/src/features/receipts/receipt-flow/receipt-flow-page.tsx`
-- Create: `apps/web/src/features/receipts/receipt-flow/receipt-stepper.tsx`
-- Create: `apps/web/src/features/receipts/receipt-flow/receipt-data-step.tsx`
-- Create: `apps/web/src/features/receipts/receipt-flow/receipt-evidence-step.tsx`
-- Create: `apps/web/src/features/receipts/receipt-flow/receipt-conference-step.tsx`
-- Create: `apps/web/src/features/receipts/receipt-flow/receipt-complete-step.tsx`
-- Create: `apps/web/src/features/receipts/receipt-flow/receipt-flow.css`
+- Modify: `apps/web/src/app/router.tsx`
+- Modify: `apps/web/src/app/routes.tsx`
+- Modify/Test: `apps/web/src/app/m1-navigation.test.tsx`
+
+**Produces router interface:**
+
+```ts
+type RouterContextValue = {
+  pathname: string
+  search: string
+  navigate: (to: string) => void
+}
+```
+
+**Route parsing contract:**
+
+```ts
+export function matchReceiptFlowPath(pathname: string): { movementId: string | null } | null
+```
+
+Matches exactly:
+
+```text
+/recebimentos/novo             -> { movementId: null }
+/recebimentos/novo/<uuid/text> -> { movementId: '<segment>' }
+```
+
+- [ ] **Step 1: Write RED router/navigation tests**
+
+Assert:
+
+```text
+RouterProvider initialPath='/recebimentos/novo?step=dados' exposes pathname '/recebimentos/novo' and search '?step=dados'
+navigate('/recebimentos/novo/abc?step=comprovacao') updates both pathname and search
+popstate reads window.location.pathname + window.location.search
+AppRoutes renders ReceiptFlowPage for bootstrap and movement routes
+```
+
+- [ ] **Step 2: Verify RED**
+
+```bash
+pnpm --filter @verdis/web test -- src/app/m1-navigation.test.tsx
+```
+
+- [ ] **Step 3: Modify `router.tsx` deterministically**
+
+Store `{ pathname, search }` in state. Parse `initialPath` with `new URL(initialPath, 'http://verdis.local')`; parse browser state from `window.location.pathname` and `window.location.search`; `navigate(to)` uses `new URL(to, window.location.origin)` before `history.pushState`.
+
+- [ ] **Step 4: Modify `routes.tsx`**
+
+Before switch, call `matchReceiptFlowPath(pathname)`. When matched, render:
+
+```tsx
+<ReceiptFlowPage movementId={match.movementId} />
+```
+
+Normal `/recebimentos` continues rendering `ReceiptsPage`.
+
+- [ ] **Step 5: Verify GREEN + typecheck**
+
+```bash
+pnpm --filter @verdis/web test -- src/app/m1-navigation.test.tsx
+pnpm --filter @verdis/web typecheck
+```
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add apps/web/src/app/router.tsx apps/web/src/app/routes.tsx apps/web/src/app/m1-navigation.test.tsx
+git commit -m "feat(receipts): route receipt wizard with search state"
+```
+
+---
+
+### Task 7: UI do wizard completo REC-03A → REC-05
+
+**Files:**
+- Create all files under: `apps/web/src/features/receipts/receipt-flow/`
+- Modify: `apps/web/src/features/receipts/receipts-page.tsx`
 - Test: `apps/web/src/features/receipts/receipt-flow/receipt-flow-page.test.tsx`
 
-**Interfaces:**
-
-`ReceiptFlowPage` receives/derives `movementId` from route params and controls the URL `?step=dados|comprovacao|conferencia|concluir`.
-
-Local-only upload state:
+**Local upload state:**
 
 ```ts
 type UploadUiState =
@@ -754,34 +810,33 @@ type UploadUiState =
   | { kind: 'failed'; file: File; message: string }
 ```
 
-Durable document/process state always comes from services/query cache.
+- [ ] **Step 1: Write RED page tests with service mocks**
 
-- [ ] **Step 1: Write the flow tests before components**
-
-Minimum component scenarios:
+Exact scenarios:
 
 ```ts
-it('keeps CONTINUAR disabled after selecting a file until the upload succeeds')
-it('shows Falha no envio without losing the draft values')
-it('shows only registered data while document processing')
-it('does not preselect a divergence decision')
-it('requires justification when keeping 480kg against 482kg')
-it('confirms 482kg without justification when use_document is chosen')
-it('renders completion with previous + entry = new stock')
-it('restores the deterministic step after remount/refresh')
+it('starts at Dados from /recebimentos/novo?step=dados')
+it('creates a draft on first Dados continue and navigates to :id?step=comprovacao')
+it('keeps normal CONTINUAR disabled after file selection until upload succeeds')
+it('keeps draft values after upload failure')
+it('allows CONTINUAR SEM DOCUMENTO to conference')
+it('shows only registered values while extraction is processing')
+it('renders 480 vs 482 with no decision preselected')
+it('requires nonblank justification for keep_registered')
+it('allows use_document without justification')
+it('renders previous stock + adopted quantity = new stock after confirmation')
+it('forces posted movement to Concluir even if query asks for dados')
 ```
 
-Mock services, not Supabase internals, in page tests.
-
-- [ ] **Step 2: Run RED**
+- [ ] **Step 2: Verify RED**
 
 ```bash
 pnpm --filter @verdis/web test -- src/features/receipts/receipt-flow/receipt-flow-page.test.tsx
 ```
 
-- [ ] **Step 3: Implement shared stepper and page shell first**
+- [ ] **Step 3: Implement stepper and frame**
 
-Stepper labels exactly:
+Stepper copy exactly:
 
 ```text
 1 Dados
@@ -790,170 +845,154 @@ Stepper labels exactly:
 4 Concluir
 ```
 
-Use existing `Breadcrumb`, `PageHeader`, `Button`, `StatusBadge`, cards and tokens; do not define a second design system.
+Reuse global `Breadcrumb`, `PageHeader`, `Button`, cards, badges and tokens. `receipt-flow.css` may define layout only; it must reference existing CSS variables and must not redefine brand tokens.
 
 - [ ] **Step 4: Implement Dados**
 
 Fields:
 
-- Origem
-- Material
-- Peso/quantidade
-- Data e hora
+```text
+Origem
+Material
+Peso/quantidade
+Data e hora
+```
 
-On first advance, call `createReceiptDraft`; after an existing movement, call `updateReceiptDraft`. Route becomes `/recebimentos/novo/<id>?step=comprovacao`.
+Bootstrap route has `movementId=null`. On first CONTINUAR call `createReceiptDraft`, then:
+
+```ts
+navigate(`/recebimentos/novo/${id}?step=comprovacao`)
+```
+
+Existing draft calls `updateReceiptDraft`.
 
 - [ ] **Step 5: Implement Comprovação states**
 
-UI states and actions exactly:
+`none`:
 
-- `none`: `TIRAR FOTO`, `ENVIAR ARQUIVO`, `CONTINUAR SEM DOCUMENTO`;
-- `selected`: filename/size/type, `Pronto para enviar`, `ENVIAR DOCUMENTO`, normal `CONTINUAR` disabled;
-- `uploading`: progress when available, conflicting actions disabled;
-- durable upload success: `Documento enviado` + `Processando`, `VISUALIZAR DOCUMENTO`, `CONTINUAR` enabled;
-- `failed`: `Falha no envio`, `TENTAR NOVAMENTE`, trocar arquivo, tirar outra foto, `CONTINUAR SEM DOCUMENTO`.
+```text
+TIRAR FOTO
+ENVIAR ARQUIVO
+CONTINUAR SEM DOCUMENTO
+```
 
-Do not show storage/API errors verbatim.
+`selected`:
+
+```text
+filename/type/size
+Pronto para enviar
+ENVIAR DOCUMENTO
+normal CONTINUAR disabled
+```
+
+`uploading`:
+
+```text
+Enviando
+progress when API exposes one, otherwise indeterminate state
+all conflicting actions disabled
+```
+
+`failed`:
+
+```text
+Falha no envio
+TENTAR NOVAMENTE
+Trocar arquivo
+Tirar outra foto
+CONTINUAR SEM DOCUMENTO
+```
+
+After successful `uploadReceiptEvidence`, refetch durable conference data and render `Documento enviado` / `Processando`, with `VISUALIZAR DOCUMENTO` and `CONTINUAR`.
+
+`CONTINUAR SEM DOCUMENTO` navigates to `?step=conferencia`; query state survives refresh and the conference view uses `registered_only`.
 
 - [ ] **Step 6: Implement Conferência**
 
-For `processing`: show only registered data + processing status + confirmation path `registered_only`.
-
-For `divergence` 480/482:
+Processing/no document:
 
 ```text
-Informado: 480 kg
-Documento: 482 kg
-Diferença: +2 kg / +0,42%
-[ USAR 482 KG ] [ MANTER 480 KG ]
+show registered data only
+no extracted values
+CONFIRMAR RECEBIMENTO -> decision registered_only
 ```
 
-No initial selection. If `keep_registered`, show required textarea and keep `CONFIRMAR RECEBIMENTO` disabled until `trim().length > 0`.
+Divergence example:
+
+```text
+Informado 480 kg
+Documento 482 kg
+Diferença +2 kg / +0,42%
+USAR 482 KG
+MANTER 480 KG
+```
+
+Neither decision is preselected. `keep_registered` shows a required textarea; CTA disabled while `reason.trim().length === 0`.
 
 - [ ] **Step 7: Implement Concluir**
 
-Render RPC result:
+Use `confirmReceipt` response as source for:
 
-- quantity adopted;
-- registered/document values when applicable;
-- decision/reason;
-- previous stock;
-- confirmed entry;
-- new stock;
-- linked document status;
-- `VER MOVIMENTAÇÃO`;
-- `RECEBER OUTRO MATERIAL`.
+```text
+quantidade final adotada
+saldo anterior
+entrada confirmada
+novo saldo
+```
 
-- [ ] **Step 8: Run GREEN and visual-contract tests**
+Keep in page state the last conference decision/reason for immediate post-confirmation rendering. If the page is reloaded after posted, load durable movement/evidence/validation data before rendering Concluir so the result does not depend on volatile state.
+
+Actions:
+
+```text
+VER MOVIMENTAÇÃO
+RECEBER OUTRO MATERIAL
+```
+
+- [ ] **Step 8: Wire CTA from Receipts overview**
+
+`+ RECEBER MATERIAL` must use `RouterLink` or router `navigate` to:
+
+```text
+/recebimentos/novo?step=dados
+```
+
+- [ ] **Step 9: Verify GREEN + web suite**
 
 ```bash
 pnpm --filter @verdis/web test -- src/features/receipts/receipt-flow/receipt-flow-page.test.tsx
-pnpm --filter @verdis/web typecheck
-```
-
-- [ ] **Step 9: Commit**
-
-```bash
-git add apps/web/src/features/receipts/receipt-flow
-git commit -m "feat(receipts): implement persistent receipt wizard"
-```
-
----
-
-### Task 7: Ligar rotas, CTA e retomada após refresh
-
-**Files:**
-- Modify: `apps/web/src/app/routes.tsx`
-- Modify: `apps/web/src/app/router.tsx` only if param parsing is not already supported
-- Modify: `apps/web/src/features/receipts/receipts-page.tsx`
-- Modify/Test: `apps/web/src/app/m1-navigation.test.tsx`
-- Test: `apps/web/src/features/receipts/receipt-flow/receipt-flow-page.test.tsx`
-
-**Interfaces:**
-
-Required routes:
-
-```text
-/recebimentos
-/recebimentos/novo/:movementId?step=dados
-/recebimentos/novo/:movementId?step=comprovacao
-/recebimentos/novo/:movementId?step=conferencia
-/recebimentos/novo/:movementId?step=concluir
-```
-
-For a brand-new operation, the CTA may enter a small creation state and replace the URL once `movementId` exists; do not fabricate a UUID before the DB creates the draft.
-
-- [ ] **Step 1: Write route/navigation tests**
-
-Assert:
-
-- clicking `+ RECEBER MATERIAL` starts the new-receipt flow;
-- a URL containing real `movementId` renders `ReceiptFlowPage`;
-- query step does not allow editing a `posted` movement;
-- reload/remount calls `deriveReceiptResumeStep` from durable facts and canonicalizes the URL to the allowed step.
-
-- [ ] **Step 2: Run RED**
-
-```bash
-pnpm --filter @verdis/web test -- src/app/m1-navigation.test.tsx src/features/receipts/receipt-flow/receipt-flow-page.test.tsx
-```
-
-- [ ] **Step 3: Implement the route integration**
-
-Extend the existing internal router minimally to support one `:movementId` segment if needed. Do not import or add React Router.
-
-- [ ] **Step 4: Run GREEN + whole web suite**
-
-```bash
 pnpm --filter @verdis/web test
 pnpm --filter @verdis/web typecheck
 pnpm --filter @verdis/web build
 ```
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 10: Commit**
 
 ```bash
-git add apps/web/src/app/routes.tsx apps/web/src/app/router.tsx \
-  apps/web/src/app/m1-navigation.test.tsx \
-  apps/web/src/features/receipts/receipts-page.tsx \
-  apps/web/src/features/receipts/receipt-flow/receipt-flow-page.test.tsx
-git commit -m "feat(receipts): route and resume receipt drafts"
+git add apps/web/src/features/receipts/receipt-flow \
+  apps/web/src/features/receipts/receipts-page.tsx
+git commit -m "feat(receipts): implement persistent receipt wizard"
 ```
 
 ---
 
-### Task 8: End-to-end database regression and final gates
+### Task 8: Full regression, generated contract and CI gate
 
 **Files:**
-- Modify: `supabase/tests/database/0012_m1_receipts_deep_flow.test.sql` if coverage gaps remain
-- Optional modify only if required by generated contract: `apps/web/src/lib/supabase/database.types.ts`
-- Update: PR description / implementation notes, not product code.
+- Modify only for test coverage gaps: `supabase/tests/database/0012_m1_receipts_deep_flow.test.sql`
+- Regenerate only if schema changed since Task 2: `apps/web/src/lib/supabase/database.types.ts`
+- No new production interface in this task.
 
-**Interfaces:** None new; this task verifies the vertical slice as one system.
-
-- [ ] **Step 1: Add final regression assertions to pgTAP**
-
-Ensure the DB test proves all four durable receipt paths:
-
-```text
-A. 480kg + no evidence + registered_only → posted + ledger +480
-B. 480kg + evidence 482 + use_document → posted quantity 482 + ledger +482
-C. 480kg + evidence 482 + keep_registered + reason → posted quantity 480 + ledger +480
-D. retry confirm on any posted receipt → reject + no second ledger row
-```
-
-Also assert `validations.rule_code` and `reason` for B/C.
-
-- [ ] **Step 2: Run fresh full database verification**
+- [ ] **Step 1: Fresh DB verification**
 
 ```bash
 supabase start
 supabase test db
 ```
 
-Expected: all database tests pass.
+Expected: all tests pass, including paths A–F from Task 2.
 
-- [ ] **Step 3: Verify generated TypeScript contract is clean**
+- [ ] **Step 2: Verify generated TypeScript contract exactly**
 
 ```bash
 supabase gen types typescript --local > /tmp/verdis-database.types.ts
@@ -962,7 +1001,7 @@ diff -u apps/web/src/lib/supabase/database.types.ts /tmp/verdis-database.types.t
 
 Expected: no diff.
 
-- [ ] **Step 4: Run fresh full web verification**
+- [ ] **Step 3: Fresh web verification**
 
 ```bash
 pnpm --filter @verdis/web test
@@ -970,46 +1009,52 @@ pnpm --filter @verdis/web typecheck
 pnpm --filter @verdis/web build
 ```
 
-Expected: 0 failed tests, typecheck exit 0, build exit 0.
+Expected: zero failed tests; typecheck and build exit 0.
 
-- [ ] **Step 5: Inspect diff against the approved spec**
-
-Checklist:
+- [ ] **Step 4: Spec acceptance checklist**
 
 ```text
-[ ] REC-03A Dados exists
-[ ] REC-03B empty evidence exists
-[ ] REC-03C selected exists
-[ ] REC-03D uploading exists
-[ ] REC-03E uploaded/processing exists
-[ ] REC-03F upload failed exists
-[ ] REC-04A conference/processing exists
-[ ] REC-04B 480/482 divergence exists
-[ ] REC-04C justification exists
-[ ] REC-05 completion exists
-[ ] refresh resumes from durable facts
-[ ] original claimed quantity is preserved
-[ ] extraction does not silently overwrite movement
-[ ] decision is explicit
-[ ] posted is the only stock-effect boundary
-[ ] stock ledger is never written by frontend
-[ ] normal processing does not create pending item
-[ ] no new shell/design language was introduced
+[ ] REC-03A Dados
+[ ] REC-03B Comprovação vazio
+[ ] REC-03C arquivo selecionado
+[ ] REC-03D enviando
+[ ] REC-03E enviado/processando
+[ ] REC-03F falha
+[ ] REC-04A conferência/processando
+[ ] REC-04B divergência 480/482
+[ ] REC-04C justificativa
+[ ] REC-05 conclusão
+[ ] refresh keeps query navigation intent but durable facts constrain editability
+[ ] posted always opens Concluir/read-only
+[ ] claimed 480 remains preserved when adopted becomes 482
+[ ] extraction never silently writes movement quantity
+[ ] keep_registered requires reason
+[ ] registered_only does not manufacture a validation/evidence upgrade
+[ ] frontend never writes stock ledger
+[ ] each posted receipt creates exactly one ledger effect
+[ ] healthy processing creates no pending item
+[ ] no second shell/palette/icon family introduced
 ```
 
-- [ ] **Step 6: Commit any final test-only adjustments**
+- [ ] **Step 5: Commit only real test/generated-contract changes**
+
+```bash
+git status --short
+```
+
+If files changed because of test hardening or regenerated types:
 
 ```bash
 git add supabase/tests/database/0012_m1_receipts_deep_flow.test.sql \
   apps/web/src/lib/supabase/database.types.ts
-git commit -m "test(receipts): complete M1 receipt flow regression coverage"
+git commit -m "test(receipts): harden deep receipt flow regression coverage"
 ```
 
-Do not create an empty commit if no files changed.
+If `git status --short` is empty, do not create an empty commit.
 
-- [ ] **Step 7: Push branch and let GitHub Actions be the final independent gate**
+- [ ] **Step 6: Push and verify GitHub Actions for the final SHA**
 
-Expected CI gates:
+Required job steps:
 
 ```text
 Install dependencies from lockfile
@@ -1021,27 +1066,34 @@ Database tests
 Verify generated TypeScript database contract
 ```
 
-Do not claim completion until the workflow for the final commit reports `success` for both `web` and `database` jobs.
+Do not claim the increment complete until both `web` and `database` jobs conclude `success` on the final commit SHA.
 
 ---
 
 ## Self-Review Against Spec
 
-Coverage mapping:
-
 - Spec §§2–3 principles/architecture → Global Constraints + Tasks 1–5.
-- Spec §4 application components → Tasks 3–6.
-- Spec §5 divergence persistence → Tasks 1, 2, 5, 6.
-- Spec §6 `confirm_receipt_m1` → Task 2 + Task 5 adapter.
-- Spec §7 document states → Tasks 4 + 6.
-- Spec §8 deterministic resume → Tasks 1 + 7.
-- Spec §9 all REC states → Task 6.
-- Spec §10 error handling → Tasks 4 + 6 + DB rollback assertions in Task 8.
-- Spec §11 authorization → Task 2 DB checks + existing RLS reuse.
-- Spec §12 stock → Task 2/8, using existing trigger only.
-- Spec §13 pendencies → Task 6 behavior; no pending record for healthy processing.
-- Spec §14 future Sales reuse → isolated domain/upload/conference services; no Sales-specific fields added.
+- Spec §4 application components → Tasks 3–7.
+- Spec §5 divergence persistence → Tasks 1, 2, 5, 7.
+- Spec §6 RPC transaction → Task 2 + Task 5 adapter.
+- Spec §7 document states → Tasks 4 + 7.
+- Spec §8 refresh/resume → Task 1 allowed-step guard + Task 6 router query support + Task 7 reload behavior.
+- Spec §9 all REC states → Task 7.
+- Spec §10 errors → Task 4 rollback + Task 7 UI error states + Task 2 transaction rollback.
+- Spec §11 security → Task 2 server-side permission checks + existing RLS.
+- Spec §12 stock → Task 2/8; existing movement-post trigger remains sole writer.
+- Spec §13 pendencies → no healthy-processing pending creation; missing document remains a movement state handled by Pendências outside this wizard.
+- Spec §14 Sales reuse → upload/conference/decision services remain independent of Sales-specific fields.
 - Spec §15 tests → Tasks 1–8.
-- Spec §16 acceptance → Task 8 checklist + CI gate.
+- Spec §16 acceptance → Task 8 checklist + final CI.
 
-No new application dependency is required. No placeholder implementation step is intentionally left open; executor must stop if repository reality contradicts a named interface rather than silently inventing a second architecture.
+### Self-review corrections already incorporated
+
+1. The current router tracks only `pathname`; Task 6 now explicitly adds `search` and a deterministic path matcher instead of saying “if needed”.
+2. A draft without a document can legitimately be at Conferência after `CONTINUAR SEM DOCUMENTO`; the query string preserves that navigation intent while durable `posted` state always overrides it.
+3. Document row + evidence row are now created atomically by `register_receipt_evidence_document`; the frontend only owns Storage upload and compensating Storage delete when RPC registration fails.
+4. `registered_only` no longer inserts an accepted validation, preventing an autodeclared receipt from becoming `VALIDATED` simply because the operator confirmed it.
+5. `use_document`/`keep_registered` require a real `document_extractions` row, not merely arbitrary JSON in `evidences.extracted_fields`.
+6. The async AI/OCR producer is explicitly out of scope, not an implementation placeholder: this increment fully supports `processing` and consumes extraction results when another pipeline produces them.
+
+No additional application dependency is required.
