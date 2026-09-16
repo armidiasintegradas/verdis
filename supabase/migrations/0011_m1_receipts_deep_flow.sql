@@ -196,10 +196,10 @@ begin
       raise exception 'receipt evidence is required';
     end if;
 
-    select * into v_evidence
-    from public.evidences
-    where id = p_evidence_id
-      and movement_id = p_movement_id
+    select e.* into v_evidence
+    from public.evidences e
+    where e.id = p_evidence_id
+      and e.movement_id = p_movement_id
     for share;
 
     if v_evidence.id is null then
