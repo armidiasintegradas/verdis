@@ -5,6 +5,7 @@ import { requiresReceiptJustification } from '@/domain/receipt-flow'
 import { useScope } from '@/features/scope/scope-provider'
 import { uploadReceiptEvidence } from '@/services/documents/upload-receipt-evidence'
 import { confirmReceipt, type ConfirmReceiptResult } from '@/services/receipts/confirm-receipt-service'
+import { loadReceiptCompletion, type ReceiptCompletionViewModel } from '@/services/receipts/receipt-completion-service'
 import { loadReceiptConference, type ReceiptConferenceViewModel } from '@/services/receipts/receipt-conference-service'
 import { createReceiptDraft, getReceiptDraft, updateReceiptDraft, type ReceiptDraftInput, type ReceiptDraftRecord } from '@/services/receipts/receipt-draft-service'
 import { Breadcrumb } from '@/ui/components/breadcrumb'
@@ -18,7 +19,7 @@ type UploadUiState =
   | { kind: 'none' }
   | { kind: 'selected'; file: File }
   | { kind: 'uploading'; file: File }
-  | { kind: 'uploaded'; filename: string }
+  | { kind: 'uploaded'; filename: string; documentId: string }
   | { kind: 'failed'; file: File; message: string }
 type FormState = { origin: string; material: string; quantityKg: string; occurredAtLocal: string }
 
@@ -70,6 +71,12 @@ function formatKg(value: number, sign = false) {
   return `${prefix}${new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 2 }).format(value)} kg`
 }
 
+function decisionLabel(decision: ReceiptDecision) {
+  if (decision === 'use_document') return 'Valor do documento adotado'
+  if (decision === 'keep_registered') return 'Mantidos valores registrados'
+  return 'Confirmado com valores registrados'
+}
+
 function ReceiptStepper({ activeStep }: { activeStep: ReceiptResumeStep }) {
   const activeIndex = STEPS.findIndex((step) => step.key === activeStep)
   return (
@@ -97,6 +104,8 @@ export function ReceiptFlowPage({ movementId }: ReceiptFlowPageProps) {
   const [draftLoading, setDraftLoading] = useState(movementId !== null)
   const [conference, setConference] = useState<ReceiptConferenceViewModel | null>(null)
   const [conferenceLoading, setConferenceLoading] = useState(false)
+  const [completion, setCompletion] = useState<ReceiptCompletionViewModel | null>(null)
+  const [completionLoading, setCompletionLoading] = useState(false)
   const [uploadState, setUploadState] = useState<UploadUiState>({ kind: 'none' })
   const [decision, setDecision] = useState<ReceiptDecision | null>(null)
   const [reason, setReason] = useState('')
@@ -156,6 +165,30 @@ export function ReceiptFlowPage({ movementId }: ReceiptFlowPageProps) {
     return () => { cancelled = true }
   }, [effectiveStep, movementId, activeScope])
 
+  useEffect(() => {
+    let cancelled = false
+    if (draft?.status !== 'posted' || !movementId || !activeScope) {
+      setCompletion(null)
+      setCompletionLoading(false)
+      return () => { cancelled = true }
+    }
+
+    setCompletionLoading(true)
+    setErrorMessage(null)
+    void loadReceiptCompletion(movementId, activeScope)
+      .then((nextCompletion) => {
+        if (!cancelled) setCompletion(nextCompletion)
+      })
+      .catch((cause) => {
+        if (!cancelled) setErrorMessage(cause instanceof Error ? cause.message : 'Não foi possível carregar o resumo do recebimento.')
+      })
+      .finally(() => {
+        if (!cancelled) setCompletionLoading(false)
+      })
+
+    return () => { cancelled = true }
+  }, [draft?.status, movementId, activeScope])
+
   const quantityKg = Number(form.quantityKg)
   const formValid = Boolean(
     form.origin.trim() &&
@@ -177,6 +210,18 @@ export function ReceiptFlowPage({ movementId }: ReceiptFlowPageProps) {
     (conferenceDecision !== null &&
       requiresReceiptJustification(conferenceDecision, hasDivergence) &&
       !reason.trim())
+
+  const completionSummary: ReceiptCompletionViewModel | null = confirmation
+    ? {
+        movementId: confirmation.movementId,
+        adoptedQuantityKg: confirmation.adoptedQuantityKg,
+        previousStockKg: confirmation.previousStockKg,
+        newStockKg: confirmation.newStockKg,
+        decision: conferenceDecision ?? 'registered_only',
+        reason: reason.trim() || null,
+        document: conference?.document ?? null,
+      }
+    : completion
 
   function setField(field: keyof FormState, value: string) {
     setForm((current) => ({ ...current, [field]: value }))
@@ -219,7 +264,11 @@ export function ReceiptFlowPage({ movementId }: ReceiptFlowPageProps) {
         file,
         claimedQuantityKg: Number(form.quantityKg),
       })
-      setUploadState({ kind: 'uploaded', filename: result.originalFilename })
+      setUploadState({
+        kind: 'uploaded',
+        filename: result.originalFilename,
+        documentId: result.documentId,
+      })
       setConference(await loadReceiptConference(movementId, activeScope))
     } catch (cause) {
       setUploadState({
@@ -335,7 +384,10 @@ export function ReceiptFlowPage({ movementId }: ReceiptFlowPageProps) {
           {uploadState.kind === 'uploaded' ? (
             <div className="v-receipt-document-card">
               <div><strong>{uploadState.filename}</strong><span>Documento enviado</span></div>
-              <StatusBadge tone="processing">Processando</StatusBadge>
+              <div className="v-receipt-inline-actions">
+                <StatusBadge tone="processing">Processando</StatusBadge>
+                <Button variant="secondary" type="button" onClick={() => navigate(`/documentos?document=${uploadState.documentId}`)}>VISUALIZAR DOCUMENTO</Button>
+              </div>
             </div>
           ) : null}
           {uploadState.kind === 'failed' ? (
@@ -410,17 +462,36 @@ export function ReceiptFlowPage({ movementId }: ReceiptFlowPageProps) {
             </div>
             <StatusBadge tone="positive">Concluído</StatusBadge>
           </div>
-          {confirmation ? (
-            <div className="v-receipt-stock-equation">
-              <div><span>Saldo anterior</span><strong>{formatKg(confirmation.previousStockKg)}</strong></div>
-              <span className="v-receipt-equation-symbol">+</span>
-              <div><span>Entrada confirmada</span><strong>{formatKg(confirmation.adoptedQuantityKg, true)}</strong></div>
-              <span className="v-receipt-equation-symbol">=</span>
-              <div><span>Novo saldo</span><strong>{formatKg(confirmation.newStockKg)}</strong></div>
-            </div>
-          ) : (
+          {completionLoading && !completionSummary ? <p>Carregando resumo...</p> : null}
+          {completionSummary ? (
+            <>
+              <div className="v-receipt-stock-equation">
+                <div><span>Saldo anterior</span><strong>{formatKg(completionSummary.previousStockKg)}</strong></div>
+                <span className="v-receipt-equation-symbol">+</span>
+                <div><span>Entrada confirmada</span><strong>{formatKg(completionSummary.adoptedQuantityKg, true)}</strong></div>
+                <span className="v-receipt-equation-symbol">=</span>
+                <div><span>Novo saldo</span><strong>{formatKg(completionSummary.newStockKg)}</strong></div>
+              </div>
+              <div className="v-receipt-comparison">
+                <div><span>Quantidade final</span><strong>{formatKg(completionSummary.adoptedQuantityKg)}</strong></div>
+                <div><span>Decisão</span><strong>{decisionLabel(completionSummary.decision)}</strong></div>
+              </div>
+              {completionSummary.document ? (
+                <div className="v-receipt-document-card">
+                  <div><span>Documento vinculado</span><strong>{completionSummary.document.filename}</strong></div>
+                  <StatusBadge tone={completionSummary.document.extractionStatus === 'accepted' ? 'positive' : 'processing'}>
+                    {completionSummary.document.extractionStatus === 'accepted' ? 'Documento processado' : 'Processando'}
+                  </StatusBadge>
+                </div>
+              ) : null}
+              {completionSummary.reason ? (
+                <div className="v-receipt-alert"><strong>Justificativa registrada</strong><p>{completionSummary.reason}</p></div>
+              ) : null}
+            </>
+          ) : null}
+          {!completionLoading && !completionSummary ? (
             <div className="v-receipt-alert"><strong>Movimentação já confirmada</strong><p>Os dados persistidos deste recebimento permanecem disponíveis no histórico operacional.</p></div>
-          )}
+          ) : null}
           <div className="v-receipt-actions v-receipt-actions--spread">
             <Button variant="secondary" type="button" onClick={() => navigate('/recebimentos')}>VER MOVIMENTAÇÃO</Button>
             <Button type="button" onClick={() => navigate('/recebimentos/novo?step=dados')}>RECEBER OUTRO MATERIAL</Button>
