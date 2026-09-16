@@ -80,9 +80,9 @@ describe('DocumentsPage', () => {
     expect(metricValue('Processando')).toBe('1')
     expect(metricValue('Requer revisão')).toBe('1')
 
-    expect(screen.getByText('Processando')).toBeInTheDocument()
-    expect(screen.getByText('Requer revisão', { selector: '.v-badge' })).toBeInTheDocument()
-    expect(screen.getByText('Falha de processamento')).toBeInTheDocument()
+    expect(screen.getByText('Processando', { selector: '.v-status-badge' })).toBeInTheDocument()
+    expect(screen.getByText('Requer revisão', { selector: '.v-status-badge' })).toBeInTheDocument()
+    expect(screen.getByText('Falha de processamento', { selector: '.v-status-badge' })).toBeInTheDocument()
   })
 
   it('opens a durable document detail and returns to the owning movement route', async () => {
