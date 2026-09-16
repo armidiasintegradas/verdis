@@ -1236,7 +1236,34 @@ export type Database = {
       }
     }
     Functions: {
-      [_ in never]: never
+      confirm_receipt_m1: {
+        Args: {
+          p_decision: string
+          p_evidence_id?: string
+          p_movement_id: string
+          p_reason?: string
+        }
+        Returns: {
+          adopted_quantity_kg: number
+          movement_id: string
+          new_stock_kg: number
+          previous_stock_kg: number
+        }[]
+      }
+      register_receipt_evidence_document: {
+        Args: {
+          p_claimed_quantity_kg: number
+          p_mime_type: string
+          p_movement_id: string
+          p_original_filename: string
+          p_sha256: string
+          p_storage_path: string
+        }
+        Returns: {
+          document_id: string
+          evidence_id: string
+        }[]
+      }
     }
     Enums: {
       evidence_level:
