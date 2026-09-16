@@ -24,6 +24,19 @@ export function requiresReceiptJustification(
   return hasDivergence && decision === 'keep_registered'
 }
 
+export function allowedReceiptStep(input: {
+  requestedStep: ReceiptResumeStep
+  movementStatus: 'draft' | 'posted' | 'voided' | null
+  hasDocument: boolean
+  extractionFinished: boolean
+  hasDivergence: boolean
+}): ReceiptResumeStep {
+  if (input.movementStatus === 'posted' || input.movementStatus === 'voided') return 'concluir'
+  if (input.movementStatus === null) return 'dados'
+  if (input.requestedStep === 'concluir') return 'conferencia'
+  return input.requestedStep
+}
+
 export function deriveReceiptResumeStep(input: {
   movementStatus: 'draft' | 'posted' | 'voided'
   hasDocument: boolean
