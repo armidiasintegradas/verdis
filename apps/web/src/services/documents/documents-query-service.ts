@@ -107,7 +107,7 @@ export async function loadDocuments(scope: ActiveScope): Promise<DocumentListIte
   const validationByMovement = latestBy(validationRows ?? [], (row) => row.movement_id ?? '')
   const materialsById = new Map((materialRows ?? []).map((row) => [row.id, row]))
 
-  return movements.flatMap<DocumentListItem>((movement) => {
+  const items = movements.flatMap<DocumentListItem>((movement) => {
     const evidence = latestEvidenceByMovement.get(movement.id)
     if (!evidence?.document_id) return []
     const document = documentsById.get(evidence.document_id)
@@ -164,4 +164,6 @@ export async function loadDocuments(scope: ActiveScope): Promise<DocumentListIte
       movementLabel: origin === 'receipt' ? 'Recebimento' : 'Venda',
     }]
   })
+
+  return items.sort((left, right) => Date.parse(right.occurredAt) - Date.parse(left.occurredAt))
 }
