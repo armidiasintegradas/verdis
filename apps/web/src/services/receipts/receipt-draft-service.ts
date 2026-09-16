@@ -80,10 +80,11 @@ export async function getReceiptDraft(
   const scoped = applyScopeFilters(query, scope)
   const { data, error } = await scoped.single()
 
-  if (error || !data) {
-    if (!data || error?.code === 'PGRST116') {
-      throw new Error('Receipt draft not found')
-    }
+  if (!data) {
+    throw new Error('Receipt draft not found')
+  }
+
+  if (error) {
     throw error
   }
 
