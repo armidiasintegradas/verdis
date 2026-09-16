@@ -92,7 +92,7 @@ export async function loadSaleConference(
   if (saleError || !sale) throw saleError ?? new Error('Sale record not found')
 
   const registered: SaleCommercialValues = {
-    quantityKg: Number(sale.quantity_kg),
+    quantityKg: Number(movement.quantity_kg),
     unitPrice: Number(sale.unit_price),
     totalAmount: Number(sale.total_amount ?? 0),
   }
