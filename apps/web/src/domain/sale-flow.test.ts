@@ -1,3 +1,4 @@
+// RED contract for the persistent M1 sales flow.
 import { describe, expect, it } from 'vitest'
 import {
   allowedSaleStep,
