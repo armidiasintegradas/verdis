@@ -1,3 +1,4 @@
+import { useRouter } from '@/app/router'
 import { Breadcrumb } from '@/ui/components/breadcrumb'
 import { Button } from '@/ui/components/button'
 import { FilterBar } from '@/ui/components/filter-bar'
@@ -7,6 +8,7 @@ import { StatusBadge } from '@/ui/components/status-badge'
 import { formatKg, m1Summary, saleMovements } from '@/features/m1/demo-data'
 
 export function SalesPage() {
+  const { navigate } = useRouter()
   return (
     <div className="v-page-grid">
       <div>
@@ -14,7 +16,7 @@ export function SalesPage() {
         <PageHeader
           title="Vendas"
           description="Saídas comerciais de materiais registradas na unidade operacional."
-          action={<Button>+ REGISTRAR VENDA</Button>}
+          action={<Button onClick={() => navigate('/vendas/nova?step=dados')}>+ REGISTRAR VENDA</Button>}
         />
       </div>
 
