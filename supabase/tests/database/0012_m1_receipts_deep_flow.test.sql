@@ -106,7 +106,6 @@ select is(
   'registered_only does not create an operator-resolution validation'
 );
 
--- Finish the asynchronous extraction fixture for movement B.
 insert into public.document_extractions (document_id, provider, model_name, model_version, extracted_fields, confidence)
 select e.document_id, 'test-provider', 'receipt-reader', 'v1', '{"quantity_kg":482}'::jsonb, 0.9900
 from public.evidences e where e.movement_id = '17000000-0000-0000-0000-000000000002';
@@ -115,7 +114,6 @@ update public.evidences
 set extracted_fields = '{"quantity_kg":482}'::jsonb
 where movement_id = '17000000-0000-0000-0000-000000000002';
 
--- Register and process an independent evidence document for movement C.
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '11000000-0000-0000-0000-000000000001', true);
 select * from public.register_receipt_evidence_document(
@@ -143,7 +141,7 @@ select throws_ok(
     (select id from public.evidences where movement_id = '17000000-0000-0000-0000-000000000003'),
     null
   ) $$,
-  '.*justification.*',
+  'justification is required to keep the registered quantity',
   'keep_registered divergence requires justification'
 );
 
@@ -219,7 +217,7 @@ select throws_ok(
   $$ select * from public.confirm_receipt_m1(
     '17000000-0000-0000-0000-000000000002', 'registered_only', null, null
   ) $$,
-  '.*not draft.*',
+  'receipt is not draft',
   'second confirmation of a posted receipt is rejected'
 );
 reset role;
@@ -230,7 +228,6 @@ select is(
   'second confirmation cannot duplicate the ledger effect'
 );
 
--- Movement D gets an evidence document but no extraction row.
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '11000000-0000-0000-0000-000000000001', true);
 select * from public.register_receipt_evidence_document(
@@ -247,7 +244,7 @@ select throws_ok(
     (select id from public.evidences where movement_id = '17000000-0000-0000-0000-000000000004'),
     null
   ) $$,
-  '.*processed.*',
+  'receipt evidence has not been processed',
   'use_document rejects evidence without a completed extraction'
 );
 
@@ -258,7 +255,7 @@ select throws_ok(
     (select id from public.evidences where movement_id = '17000000-0000-0000-0000-000000000002'),
     null
   ) $$,
-  '.*evidence.*not found.*',
+  'receipt evidence not found',
   'evidence from another movement is rejected'
 );
 reset role;
