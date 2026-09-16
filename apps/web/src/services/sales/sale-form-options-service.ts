@@ -57,10 +57,9 @@ export async function loadSaleFormOptions(scope: ActiveScope): Promise<SaleFormO
   )
 
   return {
-    buyers: (buyersResult.data ?? []).map((row) => ({
-      id: row.id,
-      label: row.external_name,
-    })),
+    buyers: (buyersResult.data ?? []).flatMap((row) =>
+      row.external_name ? [{ id: row.id, label: row.external_name }] : [],
+    ),
     materials: (materialsResult.data ?? []).map((row) => ({
       id: row.id,
       code: row.code,
