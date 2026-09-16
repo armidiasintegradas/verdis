@@ -3,7 +3,6 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider, useAuth } from '@/features/auth/auth-provider'
 import { LoginPage } from '@/features/auth/login-page'
 import { ScopeProvider, useScope } from '@/features/scope/scope-provider'
-import { ScopeSelector } from '@/features/scope/scope-selector'
 
 function ScopeBoundary({ children }: { children: ReactNode }) {
   const { memberships, activeScope, loading, error } = useScope()
@@ -20,14 +19,7 @@ function ScopeBoundary({ children }: { children: ReactNode }) {
     return <main><p>Nenhum escopo de acesso ativo foi encontrado para este usuário.</p></main>
   }
 
-  return (
-    <>
-      <header>
-        <ScopeSelector />
-      </header>
-      {children}
-    </>
-  )
+  return children
 }
 
 function SessionBoundary({ children }: { children: ReactNode }) {
