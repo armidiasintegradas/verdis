@@ -58,7 +58,7 @@ function renderPage() {
 }
 
 function metricValue(label: string) {
-  const labelNode = screen.getByText(label)
+  const labelNode = screen.getByText(label, { selector: '.v-metric-card__label' })
   const card = labelNode.closest('.v-metric-card')
   expect(card).not.toBeNull()
   return within(card as HTMLElement).getByText(/^\d+$/).textContent
