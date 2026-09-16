@@ -51,7 +51,7 @@ export function AppShell({ children }: AppShellProps) {
                 >
                   <span className="v-shell__nav-icon" aria-hidden="true">{navGlyphs[label]}</span>
                   <span>{label}</span>
-                  {label === 'Pendências' ? <span className="v-shell__nav-count">3</span> : null}
+                  {label === 'Pendências' ? <span className="v-shell__nav-count" aria-hidden="true">3</span> : null}
                 </RouterLink>
               )
             })}
