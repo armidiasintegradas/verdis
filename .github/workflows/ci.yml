@@ -34,25 +34,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Unit tests
-        id: web_tests
-        shell: bash
-        run: |
-          set +e
-          pnpm test 2>&1 | tee /tmp/verdis-web-tests.log
-          status=${PIPESTATUS[0]}
-          echo "status=$status" >> "$GITHUB_OUTPUT"
-          exit 0
-
-      - name: Upload web test diagnostics
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: web-test-diagnostics
-          path: /tmp/verdis-web-tests.log
-
-      - name: Enforce unit test result
-        if: steps.web_tests.outputs.status != '0'
-        run: exit 1
+        run: pnpm test
 
       - name: Typecheck
         run: pnpm typecheck
@@ -75,25 +57,7 @@ jobs:
         run: supabase start
 
       - name: Database tests
-        id: db_tests
-        shell: bash
-        run: |
-          set +e
-          supabase test db 2>&1 | tee /tmp/verdis-db-tests.log
-          status=${PIPESTATUS[0]}
-          echo "status=$status" >> "$GITHUB_OUTPUT"
-          exit 0
-
-      - name: Upload database test diagnostics
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: database-test-diagnostics
-          path: /tmp/verdis-db-tests.log
-
-      - name: Enforce database test result
-        if: steps.db_tests.outputs.status != '0'
-        run: exit 1
+        run: supabase test db
 
       - name: Verify generated TypeScript database contract
         run: |
