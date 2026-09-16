@@ -4,12 +4,41 @@ import { FilterBar } from '@/ui/components/filter-bar'
 import { MetricCard } from '@/ui/components/metric-card'
 import { PageHeader } from '@/ui/components/page-header'
 import { StatusBadge } from '@/ui/components/status-badge'
-import { formatKg, m1Summary, receiptMovements } from '@/features/m1/demo-data'
+import { formatKg, m1Summary, receiptMovements, type DemoMovement } from '@/features/m1/demo-data'
 
-function documentBadge(status: (typeof receiptMovements)[number]['documentStatus']) {
-  if (status === 'processado') return <StatusBadge tone="positive">Documento processado</StatusBadge>
-  if (status === 'sem_documento') return <StatusBadge tone="error">Sem documento</StatusBadge>
-  if (status === 'pendente') return <StatusBadge tone="attention">Comprovação pendente</StatusBadge>
+function movementStatus(movement: DemoMovement) {
+  if (movement.issue === 'divergencia_peso') {
+    return (
+      <>
+        <StatusBadge tone="attention">Divergência de peso</StatusBadge>
+        <div className="v-row__meta">{movement.documentLabel}</div>
+      </>
+    )
+  }
+  if (movement.documentStatus === 'processado') {
+    return (
+      <>
+        <StatusBadge tone="positive">Documento processado</StatusBadge>
+        <div className="v-row__meta">{movement.documentLabel}</div>
+      </>
+    )
+  }
+  if (movement.documentStatus === 'sem_documento') {
+    return (
+      <>
+        <StatusBadge tone="error">Sem documento</StatusBadge>
+        <div className="v-row__meta">{movement.documentLabel}</div>
+      </>
+    )
+  }
+  if (movement.documentStatus === 'pendente') {
+    return (
+      <>
+        <StatusBadge tone="attention">Comprovação pendente</StatusBadge>
+        <div className="v-row__meta">{movement.documentLabel}</div>
+      </>
+    )
+  }
   return null
 }
 
@@ -48,7 +77,7 @@ export function ReceiptsPage() {
             <article className="v-row" key={movement.id}>
               <div><div className="v-row__title">Recebimento #{movement.id}</div><div className="v-row__meta">{movement.material}</div></div>
               <div><div className="v-row__value">{formatKg(movement.quantityKg)}</div><div className="v-row__meta">{movement.occurredAtLabel}</div></div>
-              <div><div>{movement.counterparty}</div><div className="v-row__meta">{documentBadge(movement.documentStatus)}</div></div>
+              <div><div>{movement.counterparty}</div><div className="v-row__meta">{movementStatus(movement)}</div></div>
               <div className="v-row__actions"><Button variant="secondary">ABRIR</Button></div>
             </article>
           ))}
