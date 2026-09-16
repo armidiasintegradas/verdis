@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
+  allowedReceiptStep,
   calculateQuantityDifference,
   deriveConferenceState,
-  deriveReceiptResumeStep,
   requiresReceiptJustification,
 } from './receipt-flow'
 
@@ -30,27 +30,33 @@ describe('receipt flow domain', () => {
     expect(requiresReceiptJustification('registered_only', false)).toBe(false)
   })
 
-  it('prioritizes posted over every editable state during resume', () => {
-    expect(deriveReceiptResumeStep({
+  it('forces posted movements to concluir regardless of requested query step', () => {
+    expect(allowedReceiptStep({
+      requestedStep: 'dados',
       movementStatus: 'posted',
       hasDocument: true,
       extractionFinished: true,
       hasDivergence: true,
-      decision: null,
-      justificationRequired: false,
-      justificationPresent: false,
     })).toBe('concluir')
   })
 
-  it('resumes unresolved divergence at conference', () => {
-    expect(deriveReceiptResumeStep({
+  it('allows conferencia for a draft without document when URL already records that choice', () => {
+    expect(allowedReceiptStep({
+      requestedStep: 'conferencia',
       movementStatus: 'draft',
-      hasDocument: true,
-      extractionFinished: true,
-      hasDivergence: true,
-      decision: null,
-      justificationRequired: false,
-      justificationPresent: false,
+      hasDocument: false,
+      extractionFinished: false,
+      hasDivergence: false,
+    })).toBe('conferencia')
+  })
+
+  it('does not allow concluir for an unposted draft', () => {
+    expect(allowedReceiptStep({
+      requestedStep: 'concluir',
+      movementStatus: 'draft',
+      hasDocument: false,
+      extractionFinished: false,
+      hasDivergence: false,
     })).toBe('conferencia')
   })
 })
