@@ -10,10 +10,14 @@ const scope: ActiveScope = {
   unitId: '30000000-0000-4000-8000-000000000001',
 }
 
+const buyerId = '26000000-0000-4000-8000-000000000001'
+const materialId = '25000000-0000-4000-8000-000000000001'
+
 const mocks = vi.hoisted(() => ({
   createSaleDraft: vi.fn(),
   updateSaleDraft: vi.fn(),
   getSaleDraft: vi.fn(),
+  loadSaleFormOptions: vi.fn(),
   uploadSaleEvidence: vi.fn(),
   loadSaleConference: vi.fn(),
   confirmSale: vi.fn(),
@@ -27,6 +31,9 @@ vi.mock('@/services/sales/sale-draft-service', () => ({
   createSaleDraft: mocks.createSaleDraft,
   updateSaleDraft: mocks.updateSaleDraft,
   getSaleDraft: mocks.getSaleDraft,
+}))
+vi.mock('@/services/sales/sale-form-options-service', () => ({
+  loadSaleFormOptions: mocks.loadSaleFormOptions,
 }))
 vi.mock('@/services/documents/upload-sale-evidence', () => ({ uploadSaleEvidence: mocks.uploadSaleEvidence }))
 vi.mock('@/services/sales/sale-conference-service', () => ({ loadSaleConference: mocks.loadSaleConference }))
@@ -125,6 +132,10 @@ beforeEach(() => {
   mocks.createSaleDraft.mockResolvedValue({ movementId, saleId: 'sale-id', totalAmount: 3100 })
   mocks.updateSaleDraft.mockResolvedValue({ movementId, saleId: 'sale-id', totalAmount: 3100 })
   mocks.getSaleDraft.mockResolvedValue(draft())
+  mocks.loadSaleFormOptions.mockResolvedValue({
+    buyers: [{ id: buyerId, label: 'Comprador Demo' }],
+    materials: [{ id: materialId, code: 'PET', label: 'PET', availableStockKg: 3200 }],
+  })
   mocks.uploadSaleEvidence.mockResolvedValue({ documentId: 'document-id', evidenceId, originalFilename: 'Documento_Venda_1279.pdf' })
   mocks.loadSaleConference.mockResolvedValue(registeredOnlyConference())
   mocks.confirmSale.mockResolvedValue({
@@ -144,6 +155,29 @@ describe('SaleFlowPage', () => {
   it('starts at Dados', () => {
     renderFlow('/vendas/nova?step=dados')
     expect(screen.getByRole('heading', { name: 'Dados da venda' })).toBeInTheDocument()
+  })
+
+  it('loads scoped buyer/material choices and projects stock before creating the first draft', async () => {
+    renderFlow('/vendas/nova?step=dados')
+
+    const buyer = await screen.findByRole('combobox', { name: 'Comprador' })
+    const material = screen.getByRole('combobox', { name: 'Material' })
+    fireEvent.change(buyer, { target: { value: buyerId } })
+    fireEvent.change(material, { target: { value: materialId } })
+    fireEvent.change(screen.getByLabelText('Quantidade'), { target: { value: '1000' } })
+    fireEvent.change(screen.getByLabelText('Preço unitário'), { target: { value: '3.10' } })
+    fireEvent.change(screen.getByLabelText('Data e hora'), { target: { value: '2026-09-15T18:35' } })
+
+    expectPageText('Saldo atual 3.200 kg')
+    expectPageText('Saldo após venda 2.200 kg')
+
+    fireEvent.click(screen.getByRole('button', { name: 'CONTINUAR' }))
+    await waitFor(() => expect(mocks.createSaleDraft).toHaveBeenCalledWith(scope, expect.objectContaining({
+      buyerCounterpartyId: buyerId,
+      materialId,
+      quantityKg: 1000,
+      unitPrice: 3.1,
+    })))
   })
 
   it('shows canonical total and stock projection and creates the draft', async () => {
