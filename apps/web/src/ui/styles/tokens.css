@@ -1,0 +1,46 @@
+:root {
+  --verdis-brand-primary: #536938;
+  --verdis-brand-hover: #3e5129;
+  --verdis-brand-soft: #e5ecd8;
+  --verdis-positive-surface: #f0f4ea;
+  --verdis-app-background: #f9faf6;
+  --verdis-surface: #ffffff;
+
+  --verdis-success: #2f7d32;
+  --verdis-success-surface: #e8f5e9;
+  --verdis-attention: #b77a00;
+  --verdis-attention-surface: #fff8e1;
+  --verdis-error: #c83b32;
+  --verdis-error-surface: #ffebee;
+  --verdis-info: #3769b1;
+  --verdis-info-surface: #e8f0fe;
+  --verdis-neutral-surface: #f3f4f0;
+
+  --verdis-text-primary: #20251f;
+  --verdis-text-secondary: #66705f;
+  --verdis-text-muted: #87907f;
+  --verdis-border: #e1e5dc;
+  --verdis-border-strong: #cfd6c7;
+
+  --verdis-radius-sm: 8px;
+  --verdis-radius-md: 12px;
+  --verdis-radius-lg: 16px;
+  --verdis-radius-pill: 999px;
+
+  --verdis-space-xs: 4px;
+  --verdis-space-sm: 8px;
+  --verdis-space-md: 16px;
+  --verdis-space-lg: 24px;
+  --verdis-space-xl: 32px;
+  --verdis-space-2xl: 48px;
+
+  --verdis-control-height: 40px;
+  --verdis-header-height: 64px;
+  --verdis-sidebar-width: 256px;
+  --verdis-content-max: 1180px;
+
+  --verdis-shadow-sm: 0 1px 2px rgb(26 38 20 / 0.05), 0 8px 24px rgb(26 38 20 / 0.035);
+
+  --verdis-font-display: 'Domine', Georgia, 'Times New Roman', serif;
+  --verdis-font-interface: 'Public Sans', Inter, Arial, sans-serif;
+}

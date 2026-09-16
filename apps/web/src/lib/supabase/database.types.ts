@@ -1236,7 +1236,97 @@ export type Database = {
       }
     }
     Functions: {
-      [_ in never]: never
+      confirm_receipt_m1: {
+        Args: {
+          p_decision: string
+          p_evidence_id?: string
+          p_movement_id: string
+          p_reason?: string
+        }
+        Returns: {
+          adopted_quantity_kg: number
+          movement_id: string
+          new_stock_kg: number
+          previous_stock_kg: number
+        }[]
+      }
+      confirm_sale_m1: {
+        Args: {
+          p_decision: string
+          p_evidence_id?: string
+          p_movement_id: string
+          p_reason?: string
+        }
+        Returns: {
+          adopted_quantity_kg: number
+          adopted_total_amount: number
+          adopted_unit_price: number
+          movement_id: string
+          new_stock_kg: number
+          previous_stock_kg: number
+          sale_id: string
+        }[]
+      }
+      create_sale_draft_m1: {
+        Args: {
+          p_buyer_counterparty_id: string
+          p_material_id: string
+          p_organization_id: string
+          p_quantity_kg: number
+          p_sold_at: string
+          p_unit_id?: string
+          p_unit_price: number
+        }
+        Returns: {
+          movement_id: string
+          sale_id: string
+          total_amount: number
+        }[]
+      }
+      register_receipt_evidence_document: {
+        Args: {
+          p_claimed_quantity_kg: number
+          p_mime_type: string
+          p_movement_id: string
+          p_original_filename: string
+          p_sha256: string
+          p_storage_path: string
+        }
+        Returns: {
+          document_id: string
+          evidence_id: string
+        }[]
+      }
+      register_sale_evidence_document: {
+        Args: {
+          p_claimed_quantity_kg: number
+          p_claimed_unit_price: number
+          p_mime_type: string
+          p_movement_id: string
+          p_original_filename: string
+          p_sha256: string
+          p_storage_path: string
+        }
+        Returns: {
+          document_id: string
+          evidence_id: string
+        }[]
+      }
+      update_sale_draft_m1: {
+        Args: {
+          p_buyer_counterparty_id: string
+          p_material_id: string
+          p_movement_id: string
+          p_quantity_kg: number
+          p_sold_at: string
+          p_unit_price: number
+        }
+        Returns: {
+          movement_id: string
+          sale_id: string
+          total_amount: number
+        }[]
+      }
     }
     Enums: {
       evidence_level:

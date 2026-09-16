@@ -16,13 +16,14 @@ export function ScopeSelector() {
   )
 
   if (memberships.length <= 1) {
-    return null
+    return <span aria-label="Unidade operacional ativa">Escopo ativo</span>
   }
 
   return (
     <label>
-      Escopo ativo
+      <span className="v-visually-hidden">Selecionar escopo operacional</span>
       <select
+        aria-label="Selecionar escopo operacional"
         value={activeMembershipId}
         onChange={(event) => {
           const membership = memberships.find(
@@ -39,8 +40,7 @@ export function ScopeSelector() {
       >
         {memberships.map((membership, index) => (
           <option key={membership.membershipId} value={membership.membershipId}>
-            Organização {index + 1} · {membership.organizationId.slice(0, 8)}
-            {membership.unitId ? ` · unidade ${membership.unitId.slice(0, 8)}` : ''}
+            Escopo disponível {index + 1}
           </option>
         ))}
       </select>
