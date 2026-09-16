@@ -1,0 +1,32 @@
+@import '../../receipts/receipt-flow/receipt-flow.css';
+
+.v-sale-calculation-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--verdis-space-4);
+  margin-top: var(--verdis-space-5);
+}
+
+.v-sale-calculation-grid > div {
+  display: grid;
+  gap: var(--verdis-space-2);
+  padding: var(--verdis-space-4);
+  border: 1px solid var(--verdis-border);
+  border-radius: var(--verdis-radius-card);
+  background: var(--verdis-surface);
+}
+
+.v-sale-calculation-grid span {
+  color: var(--verdis-text-muted);
+  font-size: var(--verdis-font-size-sm);
+}
+
+.v-sale-calculation-grid strong {
+  font-size: var(--verdis-font-size-lg);
+}
+
+@media (max-width: 900px) {
+  .v-sale-calculation-grid {
+    grid-template-columns: 1fr;
+  }
+}
