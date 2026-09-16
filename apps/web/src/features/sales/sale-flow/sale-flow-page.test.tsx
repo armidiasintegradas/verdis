@@ -66,8 +66,8 @@ function expectPageText(text: string) {
 }
 
 function fillData(overrides: { quantity?: string; price?: string } = {}) {
-  fireEvent.change(screen.getByLabelText('Comprador'), { target: { value: 'Comprador Demo' } })
-  fireEvent.change(screen.getByLabelText('Material'), { target: { value: 'PET' } })
+  fireEvent.change(screen.getByLabelText('Comprador'), { target: { value: buyerId } })
+  fireEvent.change(screen.getByLabelText('Material'), { target: { value: materialId } })
   fireEvent.change(screen.getByLabelText('Quantidade'), { target: { value: overrides.quantity ?? '1000' } })
   fireEvent.change(screen.getByLabelText('Preço unitário'), { target: { value: overrides.price ?? '3.10' } })
   fireEvent.change(screen.getByLabelText('Data e hora'), { target: { value: '2026-09-15T18:35' } })
@@ -78,8 +78,8 @@ function draft(status: 'draft' | 'posted' = 'draft', availableStockKg = 3200) {
     movementId,
     saleId: 'sale-id',
     status,
-    buyerCounterpartyId: 'Comprador Demo',
-    materialId: 'PET',
+    buyerCounterpartyId: buyerId,
+    materialId,
     quantityKg: 1000,
     unitPrice: 3.1,
     totalAmount: 3100,
@@ -160,7 +160,8 @@ describe('SaleFlowPage', () => {
   it('loads scoped buyer/material choices and projects stock before creating the first draft', async () => {
     renderFlow('/vendas/nova?step=dados')
 
-    const buyer = await screen.findByRole('combobox', { name: 'Comprador' })
+    await screen.findByRole('option', { name: 'Comprador Demo' })
+    const buyer = screen.getByRole('combobox', { name: 'Comprador' })
     const material = screen.getByRole('combobox', { name: 'Material' })
     fireEvent.change(buyer, { target: { value: buyerId } })
     fireEvent.change(material, { target: { value: materialId } })
@@ -182,6 +183,7 @@ describe('SaleFlowPage', () => {
 
   it('shows canonical total and stock projection and creates the draft', async () => {
     renderFlow('/vendas/nova?step=dados')
+    await screen.findByRole('option', { name: 'Comprador Demo' })
     fillData()
     expectPageText('R$ 3.100,00')
     fireEvent.click(screen.getByRole('button', { name: 'CONTINUAR' }))
