@@ -7,6 +7,7 @@ import { confirmSale, type ConfirmSaleResult } from '@/services/sales/confirm-sa
 import { loadSaleCompletion, type SaleCompletionViewModel } from '@/services/sales/sale-completion-service'
 import { loadSaleConference, type SaleConferenceViewModel } from '@/services/sales/sale-conference-service'
 import { createSaleDraft, getSaleDraft, updateSaleDraft, type SaleDraftInput, type SaleDraftRecord } from '@/services/sales/sale-draft-service'
+import { loadSaleFormOptions, type SaleFormOptions } from '@/services/sales/sale-form-options-service'
 import { Breadcrumb } from '@/ui/components/breadcrumb'
 import { Button } from '@/ui/components/button'
 import { PageHeader } from '@/ui/components/page-header'
@@ -65,6 +66,8 @@ export function SaleFlowPage({ movementId }: SaleFlowPageProps) {
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
   const [draft, setDraft] = useState<SaleDraftRecord | null>(null)
   const [draftLoading, setDraftLoading] = useState(movementId !== null)
+  const [formOptions, setFormOptions] = useState<SaleFormOptions | null>(null)
+  const [optionsLoading, setOptionsLoading] = useState(true)
   const [conference, setConference] = useState<SaleConferenceViewModel | null>(null)
   const [conferenceLoading, setConferenceLoading] = useState(false)
   const [completion, setCompletion] = useState<SaleCompletionViewModel | null>(null)
@@ -77,6 +80,17 @@ export function SaleFlowPage({ movementId }: SaleFlowPageProps) {
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const cameraInputRef = useRef<HTMLInputElement | null>(null)
   const effectiveStep = allowedSaleStep({ requestedStep, movementStatus: confirmation ? 'posted' : draft?.status ?? (movementId ? 'draft' : null) })
+
+  useEffect(() => {
+    let cancelled = false
+    if (!activeScope) { setFormOptions(null); setOptionsLoading(false); return () => { cancelled = true } }
+    setOptionsLoading(true)
+    void loadSaleFormOptions(activeScope)
+      .then((value) => { if (!cancelled) setFormOptions(value) })
+      .catch((cause) => { if (!cancelled) setErrorMessage(cause instanceof Error ? cause.message : 'Não foi possível carregar compradores e materiais.') })
+      .finally(() => { if (!cancelled) setOptionsLoading(false) })
+    return () => { cancelled = true }
+  }, [activeScope])
 
   useEffect(() => {
     let cancelled = false
@@ -104,8 +118,12 @@ export function SaleFlowPage({ movementId }: SaleFlowPageProps) {
 
   const quantityKg = Number(form.quantityKg), unitPrice = Number(form.unitPrice)
   const totalAmount = Number.isFinite(quantityKg) && Number.isFinite(unitPrice) ? quantityKg * unitPrice : 0
-  const stockProjection = draft ? projectSaleStock(draft.availableStockKg, quantityKg) : null
-  const formValid = Boolean(form.buyer.trim() && form.material.trim() && Number.isFinite(quantityKg) && quantityKg > 0 && Number.isFinite(unitPrice) && unitPrice >= 0 && form.soldAtLocal && (stockProjection?.sufficient ?? true))
+  const selectedMaterial = formOptions?.materials.find((option) => option.id === form.material) ?? null
+  const availableStockKg = draft?.availableStockKg ?? selectedMaterial?.availableStockKg ?? null
+  const stockProjection = availableStockKg === null ? null : projectSaleStock(availableStockKg, quantityKg)
+  const buyerIsValid = Boolean(formOptions?.buyers.some((option) => option.id === form.buyer))
+  const materialIsValid = Boolean(formOptions?.materials.some((option) => option.id === form.material))
+  const formValid = Boolean(buyerIsValid && materialIsValid && Number.isFinite(quantityKg) && quantityKg > 0 && Number.isFinite(unitPrice) && unitPrice >= 0 && form.soldAtLocal && stockProjection?.sufficient)
   const conferenceDecision = useMemo<SaleDecision | null>(() => !conference ? null : conference.state === 'divergence' ? decision : 'registered_only', [conference, decision])
   const confirmDisabled = submitting || conferenceDecision === null || (conferenceDecision !== null && requiresSaleJustification(conferenceDecision, conference?.state === 'divergence') && !reason.trim())
   const completionSummary: SaleCompletionViewModel | null = confirmation ? {
@@ -147,13 +165,13 @@ export function SaleFlowPage({ movementId }: SaleFlowPageProps) {
     {effectiveStep === 'dados' ? <form className="v-receipt-panel" onSubmit={handleDataContinue}>
       <div className="v-receipt-panel__heading"><div><span className="v-receipt-eyebrow">ETAPA 1 DE 4</span><h2>Dados da venda</h2></div><StatusBadge tone="neutral">Rascunho</StatusBadge></div>
       <div className="v-receipt-form-grid">
-        <label className="v-field">Comprador<input className="v-control" value={form.buyer} onChange={(e) => setField('buyer', e.target.value)} /></label>
-        <label className="v-field">Material<input className="v-control" value={form.material} onChange={(e) => setField('material', e.target.value)} /></label>
+        <label className="v-field">Comprador<select className="v-control" value={form.buyer} disabled={optionsLoading} onChange={(e) => setField('buyer', e.target.value)}><option value="">Selecione um comprador</option>{formOptions?.buyers.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}</select></label>
+        <label className="v-field">Material<select className="v-control" value={form.material} disabled={optionsLoading} onChange={(e) => setField('material', e.target.value)}><option value="">Selecione um material</option>{formOptions?.materials.map((option) => <option key={option.id} value={option.id}>{option.code === option.label ? option.label : `${option.code} · ${option.label}`}</option>)}</select></label>
         <label className="v-field">Quantidade<input className="v-control" type="number" min="0" step="0.01" value={form.quantityKg} onChange={(e) => setField('quantityKg', e.target.value)} /></label>
         <label className="v-field">Preço unitário<input className="v-control" type="number" min="0" step="0.01" value={form.unitPrice} onChange={(e) => setField('unitPrice', e.target.value)} /></label>
         <label className="v-field">Data e hora<input className="v-control" type="datetime-local" value={form.soldAtLocal} onChange={(e) => setField('soldAtLocal', e.target.value)} /></label>
       </div>
-      <div className="v-sale-calculation-grid"><div><span>Valor total</span><strong>{formatCurrency(totalAmount)}</strong></div>{draft ? <div><span>Saldo atual</span><strong>{formatKg(draft.availableStockKg)}</strong></div> : null}{draft ? <div><span>Saldo após venda</span><strong>{stockProjection?.sufficient ? formatKg(stockProjection.projectedKg ?? 0) : 'Indisponível'}</strong></div> : null}</div>
+      <div className="v-sale-calculation-grid"><div><span>Valor total</span><strong>{formatCurrency(totalAmount)}</strong></div>{availableStockKg !== null ? <div><span>Saldo atual</span><strong>{formatKg(availableStockKg)}</strong></div> : null}{availableStockKg !== null ? <div><span>Saldo após venda</span><strong>{stockProjection?.sufficient ? formatKg(stockProjection.projectedKg ?? 0) : 'Indisponível'}</strong></div> : null}</div>
       <div className="v-receipt-actions"><Button type="submit" disabled={!formValid || submitting}>{submitting ? 'SALVANDO...' : 'CONTINUAR'}</Button></div>
     </form> : null}
 
