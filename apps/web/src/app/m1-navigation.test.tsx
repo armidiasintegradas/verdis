@@ -7,6 +7,12 @@ vi.mock('@/features/scope/scope-selector', () => ({
   ScopeSelector: () => <span>Cooperativa Demo · M1 Pilot</span>,
 }))
 
+vi.mock('@/features/receipts/receipt-flow/receipt-flow-page', () => ({
+  ReceiptFlowPage: ({ movementId }: { movementId: string | null }) => (
+    <div data-testid="receipt-flow-page">{movementId ?? 'bootstrap'}</div>
+  ),
+}))
+
 const cases = [
   ['/', 'Início'],
   ['/recebimentos', 'Recebimentos'],
