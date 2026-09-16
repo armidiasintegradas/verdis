@@ -152,9 +152,10 @@ beforeEach(() => {
 })
 
 describe('SaleFlowPage', () => {
-  it('starts at Dados', () => {
+  it('starts at Dados', async () => {
     renderFlow('/vendas/nova?step=dados')
     expect(screen.getByRole('heading', { name: 'Dados da venda' })).toBeInTheDocument()
+    await screen.findByRole('option', { name: 'Comprador Demo' })
   })
 
   it('loads scoped buyer/material choices and projects stock before creating the first draft', async () => {
@@ -169,8 +170,8 @@ describe('SaleFlowPage', () => {
     fireEvent.change(screen.getByLabelText('Preço unitário'), { target: { value: '3.10' } })
     fireEvent.change(screen.getByLabelText('Data e hora'), { target: { value: '2026-09-15T18:35' } })
 
-    expectPageText('Saldo atual 3.200 kg')
-    expectPageText('Saldo após venda 2.200 kg')
+    expect(screen.getByText('Saldo atual').parentElement).toHaveTextContent('3.200 kg')
+    expect(screen.getByText('Saldo após venda').parentElement).toHaveTextContent('2.200 kg')
 
     fireEvent.click(screen.getByRole('button', { name: 'CONTINUAR' }))
     await waitFor(() => expect(mocks.createSaleDraft).toHaveBeenCalledWith(scope, expect.objectContaining({
