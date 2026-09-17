@@ -63,6 +63,7 @@ jobs:
         run: |
           mkdir -p generated
           supabase gen types typescript --local > generated/database.types.ts
+          cat generated/database.types.ts
           diff -u apps/web/src/lib/supabase/database.types.ts generated/database.types.ts
 
       - name: Stop local Supabase
