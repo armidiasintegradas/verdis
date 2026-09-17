@@ -1,19 +1,15 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { RouterProvider } from '@/app/router'
 import { DocumentDetailPage } from './document-detail-page'
 
-const { loadDocumentDetail, openDocumentFile, navigate } = vi.hoisted(() => ({
+const { loadDocumentDetail, openDocumentFile } = vi.hoisted(() => ({
   loadDocumentDetail: vi.fn(),
   openDocumentFile: vi.fn(),
-  navigate: vi.fn(),
 }))
 
 vi.mock('@/services/documents/document-detail-service', () => ({ loadDocumentDetail }))
 vi.mock('@/services/documents/open-document-file', () => ({ openDocumentFile }))
-vi.mock('@/app/router', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/app/router')>()
-  return { ...actual, useRouter: () => ({ navigate }) }
-})
 vi.mock('@/features/scope/scope-provider', () => ({
   useScope: () => ({
     activeScope: { tenantId: 'tenant-1', organizationId: 'org-1', unitId: 'unit-1' },
@@ -30,11 +26,19 @@ const receiptDetail = {
   saleComparison: null, resolution: null,
 }
 
+function renderDetail(documentId = 'doc-1') {
+  return render(
+    <RouterProvider initialPath={`/documentos/${documentId}`}>
+      <DocumentDetailPage documentId={documentId} />
+    </RouterProvider>,
+  )
+}
+
 describe('DocumentDetailPage', () => {
   beforeEach(() => { vi.clearAllMocks(); loadDocumentDetail.mockResolvedValue(receiptDetail); openDocumentFile.mockResolvedValue(undefined) })
 
   it('renders durable receipt facts and keeps extraction separate from review', async () => {
-    render(<DocumentDetailPage documentId="doc-1" />)
+    renderDetail()
     expect(await screen.findByRole('heading', { name: 'pesagem.pdf' })).toBeInTheDocument()
     expect(screen.getByText('Requer revisão')).toBeInTheDocument()
     expect(screen.getByText('480,00 kg')).toBeInTheDocument()
@@ -44,7 +48,7 @@ describe('DocumentDetailPage', () => {
   })
 
   it('opens the original through the secure file helper', async () => {
-    render(<DocumentDetailPage documentId="doc-1" />)
+    renderDetail()
     await screen.findByRole('heading', { name: 'pesagem.pdf' })
     fireEvent.click(screen.getByRole('button', { name: 'VISUALIZAR ARQUIVO' }))
     await waitFor(() => expect(openDocumentFile).toHaveBeenCalledWith('tenant-1/pesagem.pdf'))
@@ -52,7 +56,7 @@ describe('DocumentDetailPage', () => {
 
   it('keeps metadata visible when secure file access fails', async () => {
     openDocumentFile.mockRejectedValueOnce(new Error('signed url failed'))
-    render(<DocumentDetailPage documentId="doc-1" />)
+    renderDetail()
     await screen.findByRole('heading', { name: 'pesagem.pdf' })
     fireEvent.click(screen.getByRole('button', { name: 'VISUALIZAR ARQUIVO' }))
     expect(await screen.findByText('Não foi possível abrir o arquivo agora. Tente novamente.')).toBeInTheDocument()
@@ -61,7 +65,7 @@ describe('DocumentDetailPage', () => {
 
   it('renders a neutral not-found response for missing or out-of-scope documents', async () => {
     loadDocumentDetail.mockResolvedValueOnce(null)
-    render(<DocumentDetailPage documentId="outside" />)
+    renderDetail('outside')
     expect(await screen.findByText('Documento não encontrado neste contexto.')).toBeInTheDocument()
   })
 })
