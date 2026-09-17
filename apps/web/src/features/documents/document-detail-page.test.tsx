@@ -10,7 +10,10 @@ const { loadDocumentDetail, openDocumentFile, navigate } = vi.hoisted(() => ({
 
 vi.mock('@/services/documents/document-detail-service', () => ({ loadDocumentDetail }))
 vi.mock('@/services/documents/open-document-file', () => ({ openDocumentFile }))
-vi.mock('@/app/router', () => ({ useRouter: () => ({ navigate }) }))
+vi.mock('@/app/router', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/app/router')>()
+  return { ...actual, useRouter: () => ({ navigate }) }
+})
 vi.mock('@/features/scope/scope-provider', () => ({
   useScope: () => ({
     activeScope: { tenantId: 'tenant-1', organizationId: 'org-1', unitId: 'unit-1' },
