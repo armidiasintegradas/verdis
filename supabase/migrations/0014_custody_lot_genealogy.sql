@@ -1,0 +1,149 @@
+-- Verdis M1 — digital custody lots and genealogy.
+-- stock_ledger_entries remains the sole quantitative stock truth; lot quantities
+-- describe custody allocation only and never replace stock accounting.
+
+create table public.custody_lots (
+  id uuid primary key default gen_random_uuid(),
+  tenant_id uuid not null references public.tenants(id) on delete restrict,
+  organization_id uuid not null references public.organizations(id) on delete restrict,
+  unit_id uuid not null references public.units(id) on delete restrict,
+  material_id uuid not null references public.materials(id) on delete restrict,
+  originated_quantity_kg numeric(18,3) not null check (originated_quantity_kg > 0),
+  available_quantity_kg numeric(18,3) not null check (available_quantity_kg >= 0 and available_quantity_kg <= originated_quantity_kg),
+  source_subject_id uuid,
+  created_by uuid references auth.users(id) on delete set null,
+  created_at timestamptz not null default now()
+);
+
+create index custody_lots_scope_idx on public.custody_lots (tenant_id,organization_id,unit_id,material_id,created_at desc);
+
+create table public.custody_lot_links (
+  id uuid primary key default gen_random_uuid(),
+  tenant_id uuid not null references public.tenants(id) on delete restrict,
+  organization_id uuid not null references public.organizations(id) on delete restrict,
+  unit_id uuid not null references public.units(id) on delete restrict,
+  parent_lot_id uuid not null references public.custody_lots(id) on delete restrict,
+  child_lot_id uuid not null references public.custody_lots(id) on delete restrict,
+  relation_kind text not null check (relation_kind in ('split','merge')),
+  quantity_kg numeric(18,3) not null check (quantity_kg > 0),
+  created_at timestamptz not null default now(),
+  check (parent_lot_id <> child_lot_id),
+  unique(parent_lot_id,child_lot_id)
+);
+
+create index custody_lot_links_parent_idx on public.custody_lot_links(parent_lot_id);
+create index custody_lot_links_child_idx on public.custody_lot_links(child_lot_id);
+
+create table public.custody_lot_consumptions (
+  id uuid primary key default gen_random_uuid(),
+  tenant_id uuid not null references public.tenants(id) on delete restrict,
+  organization_id uuid not null references public.organizations(id) on delete restrict,
+  unit_id uuid not null references public.units(id) on delete restrict,
+  lot_id uuid not null references public.custody_lots(id) on delete restrict,
+  quantity_kg numeric(18,3) not null check(quantity_kg > 0),
+  destination_subject_id uuid,
+  correlation_id uuid not null,
+  created_by uuid references auth.users(id) on delete set null,
+  created_at timestamptz not null default now()
+);
+
+create or replace function app_private.ensure_custody_lot_scope()
+returns trigger language plpgsql set search_path=public,pg_temp as $$
+declare ot uuid; ut uuid; uo uuid; mt uuid;
+begin
+ select tenant_id into ot from public.organizations where id=new.organization_id;
+ select tenant_id,organization_id into ut,uo from public.units where id=new.unit_id;
+ select tenant_id into mt from public.materials where id=new.material_id;
+ if ot is null or ut is null or mt is null or ot<>new.tenant_id or ut<>new.tenant_id or mt<>new.tenant_id or uo<>new.organization_id then
+   raise exception 'custody lot scope/material mismatch';
+ end if;
+ return new;
+end $$;
+create trigger custody_lots_scope_consistency before insert or update of tenant_id,organization_id,unit_id,material_id on public.custody_lots for each row execute function app_private.ensure_custody_lot_scope();
+
+create or replace function app_private.protect_custody_lot_origin()
+returns trigger language plpgsql set search_path=public,pg_temp as $$ begin
+ if new.originated_quantity_kg is distinct from old.originated_quantity_kg or new.tenant_id<>old.tenant_id or new.organization_id<>old.organization_id or new.unit_id<>old.unit_id or new.material_id<>old.material_id then
+   raise exception 'custody lot origin is immutable';
+ end if; return new;
+end $$;
+create trigger custody_lots_origin_immutable before update on public.custody_lots for each row execute function app_private.protect_custody_lot_origin();
+
+create or replace function app_private.ensure_custody_link()
+returns trigger language plpgsql set search_path=public,pg_temp as $$
+declare p public.custody_lots%rowtype; c public.custody_lots%rowtype;
+begin
+ select * into p from public.custody_lots where id=new.parent_lot_id;
+ select * into c from public.custody_lots where id=new.child_lot_id;
+ if p.id is null or c.id is null or p.tenant_id<>c.tenant_id or p.organization_id<>c.organization_id or p.unit_id<>c.unit_id or p.material_id<>c.material_id or new.tenant_id<>p.tenant_id or new.organization_id<>p.organization_id or new.unit_id<>p.unit_id then raise exception 'custody genealogy scope/material mismatch'; end if;
+ if exists(with recursive ancestors(id) as (select new.child_lot_id union all select l.parent_lot_id from public.custody_lot_links l join ancestors a on l.child_lot_id=a.id) select 1 from ancestors where id=new.parent_lot_id) then raise exception 'custody genealogy cycle'; end if;
+ return new;
+end $$;
+create trigger custody_lot_links_consistency before insert on public.custody_lot_links for each row execute function app_private.ensure_custody_link();
+
+alter table public.custody_lots enable row level security;
+alter table public.custody_lot_links enable row level security;
+alter table public.custody_lot_consumptions enable row level security;
+
+create policy custody_lots_select on public.custody_lots for select to authenticated using(app_private.has_permission(auth.uid(),tenant_id,organization_id,unit_id,'traceability.read'));
+create policy custody_links_select on public.custody_lot_links for select to authenticated using(app_private.has_permission(auth.uid(),tenant_id,organization_id,unit_id,'traceability.read'));
+create policy custody_consumptions_select on public.custody_lot_consumptions for select to authenticated using(app_private.has_permission(auth.uid(),tenant_id,organization_id,unit_id,'traceability.read'));
+
+create or replace function public.create_custody_lot(p_tenant_id uuid,p_organization_id uuid,p_unit_id uuid,p_material_id uuid,p_quantity_kg numeric,p_source_subject_id uuid,p_justification text)
+returns uuid language plpgsql security definer set search_path=public,pg_temp as $$
+declare v_id uuid:=gen_random_uuid(); v_corr uuid:=gen_random_uuid();
+begin
+ if not app_private.has_permission(auth.uid(),p_tenant_id,p_organization_id,p_unit_id,'traceability.operate') then raise exception 'permission denied'; end if;
+ insert into public.custody_lots(id,tenant_id,organization_id,unit_id,material_id,originated_quantity_kg,available_quantity_kg,source_subject_id,created_by) values(v_id,p_tenant_id,p_organization_id,p_unit_id,p_material_id,p_quantity_kg,p_quantity_kg,p_source_subject_id,auth.uid());
+ insert into public.audit_events(tenant_id,organization_id,unit_id,actor_user_id,action,subject_type,subject_id,correlation_id,justification) values(p_tenant_id,p_organization_id,p_unit_id,auth.uid(),'lot.created','custody_lot',v_id,v_corr,p_justification);
+ return v_id;
+end $$;
+
+create or replace function public.consume_custody_lot(p_lot_id uuid,p_quantity_kg numeric,p_destination_subject_id uuid,p_justification text)
+returns uuid language plpgsql security definer set search_path=public,pg_temp as $$
+declare l public.custody_lots%rowtype; v_id uuid:=gen_random_uuid(); v_corr uuid:=gen_random_uuid();
+begin
+ select * into l from public.custody_lots where id=p_lot_id for update;
+ if l.id is null then raise exception 'custody lot not found'; end if;
+ if not app_private.has_permission(auth.uid(),l.tenant_id,l.organization_id,l.unit_id,'traceability.operate') then raise exception 'permission denied'; end if;
+ if p_quantity_kg<=0 or p_quantity_kg>l.available_quantity_kg then raise exception 'custody lot consumption exceeds available quantity'; end if;
+ update public.custody_lots set available_quantity_kg=available_quantity_kg-p_quantity_kg where id=l.id;
+ insert into public.custody_lot_consumptions(id,tenant_id,organization_id,unit_id,lot_id,quantity_kg,destination_subject_id,correlation_id,created_by) values(v_id,l.tenant_id,l.organization_id,l.unit_id,l.id,p_quantity_kg,p_destination_subject_id,v_corr,auth.uid());
+ insert into public.audit_events(tenant_id,organization_id,unit_id,actor_user_id,action,subject_type,subject_id,correlation_id,justification,new_state) values(l.tenant_id,l.organization_id,l.unit_id,auth.uid(),'lot.consumed','custody_lot',l.id,v_corr,p_justification,jsonb_build_object('quantity_kg',p_quantity_kg,'destination_subject_id',p_destination_subject_id));
+ return v_id;
+end $$;
+
+create or replace function public.split_custody_lot(p_lot_id uuid,p_quantities_kg numeric[],p_correlation_id uuid,p_justification text)
+returns uuid[] language plpgsql security definer set search_path=public,pg_temp as $$
+declare l public.custody_lots%rowtype; q numeric; total numeric:=0; child uuid; result uuid[]:='{}'; corr uuid:=coalesce(p_correlation_id,gen_random_uuid());
+begin
+ select * into l from public.custody_lots where id=p_lot_id for update;
+ if l.id is null then raise exception 'custody lot not found'; end if;
+ if not app_private.has_permission(auth.uid(),l.tenant_id,l.organization_id,l.unit_id,'traceability.operate') then raise exception 'permission denied'; end if;
+ foreach q in array p_quantities_kg loop if q<=0 then raise exception 'split quantities must be positive'; end if; total:=total+q; end loop;
+ if total<>l.available_quantity_kg then raise exception 'split must conserve available mass'; end if;
+ update public.custody_lots set available_quantity_kg=0 where id=l.id;
+ foreach q in array p_quantities_kg loop child:=gen_random_uuid(); insert into public.custody_lots(id,tenant_id,organization_id,unit_id,material_id,originated_quantity_kg,available_quantity_kg,source_subject_id,created_by) values(child,l.tenant_id,l.organization_id,l.unit_id,l.material_id,q,q,l.source_subject_id,auth.uid()); insert into public.custody_lot_links(tenant_id,organization_id,unit_id,parent_lot_id,child_lot_id,relation_kind,quantity_kg) values(l.tenant_id,l.organization_id,l.unit_id,l.id,child,'split',q); result:=array_append(result,child); end loop;
+ insert into public.audit_events(tenant_id,organization_id,unit_id,actor_user_id,action,subject_type,subject_id,correlation_id,justification,new_state) values(l.tenant_id,l.organization_id,l.unit_id,auth.uid(),'lot.split','custody_lot',l.id,corr,p_justification,jsonb_build_object('children',result));
+ return result;
+end $$;
+
+create or replace function public.merge_custody_lots(p_lot_ids uuid[],p_correlation_id uuid,p_justification text)
+returns uuid language plpgsql security definer set search_path=public,pg_temp as $$
+declare first_lot public.custody_lots%rowtype; l public.custody_lots%rowtype; total numeric:=0; merged uuid:=gen_random_uuid(); corr uuid:=coalesce(p_correlation_id,gen_random_uuid()); lot_id uuid;
+begin
+ if coalesce(array_length(p_lot_ids,1),0)<2 then raise exception 'merge requires at least two lots'; end if;
+ select * into first_lot from public.custody_lots where id=p_lot_ids[1] for update;
+ if first_lot.id is null then raise exception 'custody lot not found'; end if;
+ if not app_private.has_permission(auth.uid(),first_lot.tenant_id,first_lot.organization_id,first_lot.unit_id,'traceability.operate') then raise exception 'permission denied'; end if;
+ foreach lot_id in array p_lot_ids loop select * into l from public.custody_lots where id=lot_id for update; if l.id is null or l.tenant_id<>first_lot.tenant_id or l.organization_id<>first_lot.organization_id or l.unit_id<>first_lot.unit_id or l.material_id<>first_lot.material_id then raise exception 'merge scope/material mismatch'; end if; if l.available_quantity_kg<=0 then raise exception 'merge source has no available quantity'; end if; total:=total+l.available_quantity_kg; end loop;
+ insert into public.custody_lots(id,tenant_id,organization_id,unit_id,material_id,originated_quantity_kg,available_quantity_kg,created_by) values(merged,first_lot.tenant_id,first_lot.organization_id,first_lot.unit_id,first_lot.material_id,total,total,auth.uid());
+ foreach lot_id in array p_lot_ids loop select * into l from public.custody_lots where id=lot_id; insert into public.custody_lot_links(tenant_id,organization_id,unit_id,parent_lot_id,child_lot_id,relation_kind,quantity_kg) values(l.tenant_id,l.organization_id,l.unit_id,l.id,merged,'merge',l.available_quantity_kg); update public.custody_lots set available_quantity_kg=0 where id=l.id; end loop;
+ insert into public.audit_events(tenant_id,organization_id,unit_id,actor_user_id,action,subject_type,subject_id,correlation_id,justification,new_state) values(first_lot.tenant_id,first_lot.organization_id,first_lot.unit_id,auth.uid(),'lot.merged','custody_lot',merged,corr,p_justification,jsonb_build_object('parents',p_lot_ids,'quantity_kg',total));
+ return merged;
+end $$;
+
+grant execute on function public.create_custody_lot(uuid,uuid,uuid,uuid,numeric,uuid,text) to authenticated;
+grant execute on function public.consume_custody_lot(uuid,numeric,uuid,text) to authenticated;
+grant execute on function public.split_custody_lot(uuid,numeric[],uuid,text) to authenticated;
+grant execute on function public.merge_custody_lots(uuid[],uuid,text) to authenticated;
