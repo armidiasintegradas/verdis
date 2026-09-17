@@ -64,8 +64,9 @@ describe('DocumentDetailPage', () => {
   })
 
   it('renders a neutral not-found response for missing or out-of-scope documents', async () => {
-    loadDocumentDetail.mockResolvedValueOnce(null)
+    loadDocumentDetail.mockResolvedValue(null)
     renderDetail('outside')
+    await waitFor(() => expect(loadDocumentDetail).toHaveBeenCalledWith('outside', expect.objectContaining({ tenantId: 'tenant-1' })))
     expect(await screen.findByText('Documento não encontrado neste contexto.')).toBeInTheDocument()
   })
 })
