@@ -2,9 +2,11 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { DocumentDetailPage } from './document-detail-page'
 
-const loadDocumentDetail = vi.fn()
-const openDocumentFile = vi.fn()
-const navigate = vi.fn()
+const { loadDocumentDetail, openDocumentFile, navigate } = vi.hoisted(() => ({
+  loadDocumentDetail: vi.fn(),
+  openDocumentFile: vi.fn(),
+  navigate: vi.fn(),
+}))
 
 vi.mock('@/services/documents/document-detail-service', () => ({ loadDocumentDetail }))
 vi.mock('@/services/documents/open-document-file', () => ({ openDocumentFile }))
