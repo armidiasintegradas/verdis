@@ -131,7 +131,10 @@ export function DocumentsPage() {
 
     setLoading(true)
     setErrorMessage(null)
-    void loadDocuments(activeScope)
+    const timeoutPromise = new Promise<DocumentListItem[]>((_, reject) =>
+      setTimeout(() => reject(new Error('timeout')), 1200)
+    )
+    void Promise.race([loadDocuments(activeScope), timeoutPromise])
       .then((items) => {
         if (!cancelled) setDocuments(items.length > 0 ? items : PILOT_DOCUMENTS)
       })

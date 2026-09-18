@@ -143,9 +143,16 @@ export function AuditCenterPage() {
     if (actionFilter !== 'all') filterObj.action = actionFilter
     if (subjectTypeFilter !== 'all') filterObj.subjectType = subjectTypeFilter
 
-    Promise.all([
-      listAuditEvents(activeScope, filterObj),
-      listAuditExceptions(activeScope),
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('timeout')), 1200)
+    )
+
+    Promise.race([
+      Promise.all([
+        listAuditEvents(activeScope, filterObj),
+        listAuditExceptions(activeScope),
+      ]),
+      timeoutPromise,
     ])
       .then(([eventsData, exceptionsData]) => {
         if (!cancelled) {
