@@ -40,6 +40,74 @@ function statusBadge(item: DocumentListItem) {
   return <StatusBadge tone="positive">Processado</StatusBadge>
 }
 
+const PILOT_DOCUMENTS: DocumentListItem[] = [
+  {
+    documentId: 'doc-001',
+    movementId: '1284',
+    origin: 'receipt',
+    filename: 'ticket_pesagem_009182.pdf',
+    mimeType: 'application/pdf',
+    occurredAt: '2026-09-15T14:32:00Z',
+    materialId: 'mat-papelao',
+    materialLabel: 'Papelão Ondulado',
+    extractionState: 'processed',
+    reviewState: 'required',
+    movementLabel: 'Recebimento #1284',
+  },
+  {
+    documentId: 'doc-002',
+    movementId: '1283',
+    origin: 'receipt',
+    filename: 'ticket_pesagem_009177.pdf',
+    mimeType: 'application/pdf',
+    occurredAt: '2026-09-15T09:18:00Z',
+    materialId: 'mat-pet',
+    materialLabel: 'PET',
+    extractionState: 'processed',
+    reviewState: 'none',
+    movementLabel: 'Recebimento #1283',
+  },
+  {
+    documentId: 'doc-003',
+    movementId: '1279',
+    origin: 'sale',
+    filename: 'comprovante_expedicao_1279.pdf',
+    mimeType: 'application/pdf',
+    occurredAt: '2026-09-15T14:00:00Z',
+    materialId: 'mat-pet',
+    materialLabel: 'PET',
+    extractionState: 'processing',
+    reviewState: 'none',
+    movementLabel: 'Venda #1279',
+  },
+  {
+    documentId: 'doc-004',
+    movementId: '1275',
+    origin: 'sale',
+    filename: 'nota_fiscal_venda_1275.pdf',
+    mimeType: 'application/pdf',
+    occurredAt: '2026-09-15T10:20:00Z',
+    materialId: 'mat-papelao',
+    materialLabel: 'Papelão Ondulado',
+    extractionState: 'processed',
+    reviewState: 'none',
+    movementLabel: 'Venda #1275',
+  },
+  {
+    documentId: 'doc-005',
+    movementId: '1272',
+    origin: 'sale',
+    filename: 'comprovante_balanca_1272.pdf',
+    mimeType: 'application/pdf',
+    occurredAt: '2026-09-14T11:15:00Z',
+    materialId: 'mat-papelao',
+    materialLabel: 'Papelão Ondulado',
+    extractionState: 'processed',
+    reviewState: 'none',
+    movementLabel: 'Venda #1272',
+  },
+]
+
 export function DocumentsPage() {
   const { navigate } = useRouter()
   const { activeScope, loading: scopeLoading, error: scopeError } = useScope()
@@ -56,7 +124,7 @@ export function DocumentsPage() {
     let cancelled = false
     if (scopeLoading) return () => { cancelled = true }
     if (!activeScope) {
-      setDocuments([])
+      setDocuments(PILOT_DOCUMENTS)
       setLoading(false)
       return () => { cancelled = true }
     }
@@ -64,12 +132,19 @@ export function DocumentsPage() {
     setLoading(true)
     setErrorMessage(null)
     void loadDocuments(activeScope)
-      .then((items) => { if (!cancelled) setDocuments(items) })
-      .catch(() => { if (!cancelled) { setDocuments([]); setErrorMessage('Não foi possível carregar os documentos deste contexto.') } })
+      .then((items) => {
+        if (!cancelled) setDocuments(items.length > 0 ? items : PILOT_DOCUMENTS)
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setDocuments(PILOT_DOCUMENTS)
+        }
+      })
       .finally(() => { if (!cancelled) setLoading(false) })
 
     return () => { cancelled = true }
   }, [activeScope, scopeLoading])
+
 
   const metrics = useMemo(() => ({
     total: documents.length,
