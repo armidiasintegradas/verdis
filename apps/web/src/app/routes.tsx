@@ -1,3 +1,5 @@
+import { AuditCenterPage } from '@/features/audit/audit-center-page'
+import { DocumentDetailPage } from '@/features/documents/document-detail-page'
 import { DocumentsPage } from '@/features/documents/documents-page'
 import { HomePage } from '@/features/home/home-page'
 import { PendingPage } from '@/features/pending/pending-page'
@@ -26,14 +28,24 @@ export function matchSaleFlowPath(pathname: string) {
   return matchFlowPath(pathname, '/vendas/nova')
 }
 
+export function matchDocumentDetailPath(pathname: string): { documentId: string } | null {
+  const prefix = '/documentos/'
+  if (!pathname.startsWith(prefix)) return null
+  const documentId = pathname.slice(prefix.length)
+  if (!documentId || documentId.includes('/')) return null
+  return { documentId }
+}
+
 export function AppRoutes() {
   const { pathname } = useRouter()
   const receiptFlow = matchReceiptFlowPath(pathname)
   const saleFlow = matchSaleFlowPath(pathname)
+  const documentDetail = matchDocumentDetailPath(pathname)
 
   const page = (() => {
     if (receiptFlow) return <ReceiptFlowPage movementId={receiptFlow.movementId} />
     if (saleFlow) return <SaleFlowPage movementId={saleFlow.movementId} />
+    if (documentDetail) return <DocumentDetailPage documentId={documentDetail.documentId} />
 
     switch (pathname) {
       case '/recebimentos':
@@ -46,6 +58,8 @@ export function AppRoutes() {
         return <DocumentsPage />
       case '/pendencias':
         return <PendingPage />
+      case '/auditoria':
+        return <AuditCenterPage />
       case '/':
       default:
         return <HomePage />
