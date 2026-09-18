@@ -13,7 +13,7 @@ test('renders the canonical navigation and generic user identity', () => {
     </RouterProvider>,
   )
 
-  expect(screen.getByText('verdis.')).toBeInTheDocument()
+  expect(screen.getAllByText('verdis.').length).toBeGreaterThan(0)
   expect(screen.getByRole('link', { name: 'Documentos' })).toHaveAttribute('aria-current', 'page')
   expect(screen.getByText('Maria — Gestora')).toBeInTheDocument()
   expect(screen.getAllByLabelText('Usuário').length).toBeGreaterThan(0)

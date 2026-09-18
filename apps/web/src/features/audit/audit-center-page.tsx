@@ -25,98 +25,6 @@ function formatDate(iso: string): string {
   }
 }
 
-const PILOT_AUDIT_EVENTS: AuditEventItem[] = [
-  {
-    id: 'evt-001',
-    tenantId: '10000000-0000-4000-8000-000000000001',
-    organizationId: '20000000-0000-4000-8000-000000000001',
-    unitId: '30000000-0000-4000-8000-000000000001',
-    actorUserId: 'usr-maria',
-    action: 'movement.receipt.confirmed',
-    subjectType: 'movement',
-    subjectId: '1284',
-    correlationId: 'corr-001',
-    causationEventId: null,
-    justification: 'Entrada de 480 kg de Papelão Ondulado confirmada com justificativa operacional.',
-    previousState: { status: 'draft' },
-    newState: { status: 'confirmed', quantityKg: 480 },
-    technicalContext: { source: 'web_portal', client: 'm1_cooperative' },
-    occurredAt: '2026-09-15T14:35:00Z',
-  },
-  {
-    id: 'evt-002',
-    tenantId: '10000000-0000-4000-8000-000000000001',
-    organizationId: '20000000-0000-4000-8000-000000000001',
-    unitId: '30000000-0000-4000-8000-000000000001',
-    actorUserId: 'system',
-    action: 'document.extraction.completed',
-    subjectType: 'document',
-    subjectId: 'doc-001',
-    correlationId: 'corr-001',
-    causationEventId: 'evt-001',
-    justification: 'Extração automática de dados do ticket #009182 concluída com alta confiança.',
-    previousState: { extraction_status: 'processing' },
-    newState: { extraction_status: 'accepted', confidence: 0.98 },
-    technicalContext: { engine: 'evidence_v1' },
-    occurredAt: '2026-09-15T14:33:00Z',
-  },
-  {
-    id: 'evt-003',
-    tenantId: '10000000-0000-4000-8000-000000000001',
-    organizationId: '20000000-0000-4000-8000-000000000001',
-    unitId: '30000000-0000-4000-8000-000000000001',
-    actorUserId: 'usr-maria',
-    action: 'validation.divergence.resolved',
-    subjectType: 'validation',
-    subjectId: 'val-001',
-    correlationId: 'corr-002',
-    causationEventId: null,
-    justification: 'Divergência de 10 kg aprovada devido a umidade constatada na pesagem inicial.',
-    previousState: { state: 'divergence' },
-    newState: { state: 'resolved', decision: 'keep_registered' },
-    technicalContext: { ruleCode: 'REC-002' },
-    occurredAt: '2026-09-15T11:20:00Z',
-  },
-  {
-    id: 'evt-004',
-    tenantId: '10000000-0000-4000-8000-000000000001',
-    organizationId: '20000000-0000-4000-8000-000000000001',
-    unitId: '30000000-0000-4000-8000-000000000001',
-    actorUserId: 'usr-maria',
-    action: 'movement.sale.confirmed',
-    subjectType: 'movement',
-    subjectId: '1279',
-    correlationId: 'corr-003',
-    causationEventId: null,
-    justification: 'Expedição comercial de 1.200 kg de PET confirmada para Comprador Demo.',
-    previousState: { status: 'draft' },
-    newState: { status: 'confirmed', totalAmount: 3720 },
-    technicalContext: { source: 'web_portal' },
-    occurredAt: '2026-09-15T10:00:00Z',
-  },
-]
-
-const PILOT_AUDIT_EXCEPTIONS: AuditExceptionItem[] = [
-  {
-    id: 'exc-001',
-    tenantId: '10000000-0000-4000-8000-000000000001',
-    organizationId: '20000000-0000-4000-8000-000000000001',
-    unitId: '30000000-0000-4000-8000-000000000001',
-    subjectType: 'movement',
-    subjectId: '1284',
-    sourceEventId: 'evt-001',
-    state: 'open',
-    openedAt: '2026-09-15T14:32:00Z',
-    openedByUserId: 'system',
-    assignedToUserId: 'usr-maria',
-    resolvedAt: null,
-    resolutionResult: null,
-    resolutionJustification: null,
-    correctiveEventId: null,
-    updatedAt: '2026-09-15T14:32:00Z',
-  },
-]
-
 export function AuditCenterPage() {
   const { activeScope, loading: scopeLoading, error: scopeError } = useScope()
   const [events, setEvents] = useState<AuditEventItem[]>([])
@@ -131,8 +39,8 @@ export function AuditCenterPage() {
     if (scopeLoading) return () => { cancelled = true }
     if (!activeScope) {
       setLoading(false)
-      setEvents(PILOT_AUDIT_EVENTS)
-      setExceptions(PILOT_AUDIT_EXCEPTIONS)
+      setEvents([])
+      setExceptions([])
       return () => { cancelled = true }
     }
 
@@ -143,28 +51,18 @@ export function AuditCenterPage() {
     if (actionFilter !== 'all') filterObj.action = actionFilter
     if (subjectTypeFilter !== 'all') filterObj.subjectType = subjectTypeFilter
 
-    const timeoutPromise = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error('timeout')), 1200)
-    )
-
-    Promise.race([
-      Promise.all([
-        listAuditEvents(activeScope, filterObj),
-        listAuditExceptions(activeScope),
-      ]),
-      timeoutPromise,
+    Promise.all([
+      listAuditEvents(activeScope, filterObj),
+      listAuditExceptions(activeScope),
     ])
       .then(([eventsData, exceptionsData]) => {
         if (!cancelled) {
-          setEvents(eventsData.length > 0 ? eventsData : PILOT_AUDIT_EVENTS)
-          setExceptions(exceptionsData.length > 0 ? exceptionsData : PILOT_AUDIT_EXCEPTIONS)
+          setEvents(eventsData)
+          setExceptions(exceptionsData)
         }
       })
       .catch(() => {
-        if (!cancelled) {
-          setEvents(PILOT_AUDIT_EVENTS)
-          setExceptions(PILOT_AUDIT_EXCEPTIONS)
-        }
+        if (!cancelled) setError(true)
       })
       .finally(() => {
         if (!cancelled) setLoading(false)
@@ -172,7 +70,6 @@ export function AuditCenterPage() {
 
     return () => { cancelled = true }
   }, [activeScope, scopeLoading, actionFilter, subjectTypeFilter])
-
 
   if (scopeLoading || loading) {
     return (
