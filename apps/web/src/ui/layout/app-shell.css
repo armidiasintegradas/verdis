@@ -207,6 +207,16 @@
   font-weight: 800;
   letter-spacing: .04em;
   white-space: nowrap;
+  transition: all .2s ease;
+}
+.v-shell__operation.is-offline {
+  border-color: #ecd9b3;
+  background: #fdfaf2;
+  color: #7b5907;
+}
+.v-shell__operation.is-offline .v-shell__operation-dot {
+  background: #d48b11;
+  box-shadow: 0 0 0 3px rgba(212, 139, 17, 0.2);
 }
 
 .v-shell__search {

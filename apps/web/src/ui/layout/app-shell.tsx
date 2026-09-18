@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { RouterLink, useRouter } from '@/app/router'
 import { ScopeSelector } from '@/features/scope/scope-selector'
 import { Avatar } from '@/ui/components/avatar'
@@ -22,6 +22,18 @@ type AppShellProps = {
 export function AppShell({ children }: AppShellProps) {
   const { pathname } = useRouter()
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [isOnline, setIsOnline] = useState(() => (typeof navigator !== 'undefined' ? navigator.onLine : true))
+
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true)
+    const handleOffline = () => setIsOnline(false)
+    window.addEventListener('online', handleOnline)
+    window.addEventListener('offline', handleOffline)
+    return () => {
+      window.removeEventListener('online', handleOnline)
+      window.removeEventListener('offline', handleOffline)
+    }
+  }, [])
 
   return (
     <div className="v-shell">
@@ -97,9 +109,9 @@ export function AppShell({ children }: AppShellProps) {
             <div className="v-shell__scope-control"><ScopeSelector /></div>
           </div>
 
-          <div className="v-shell__operation">
+          <div className={`v-shell__operation${!isOnline ? ' is-offline' : ''}`}>
             <span className="v-shell__operation-dot" aria-hidden="true" />
-            <span>OPERAÇÃO ATIVA · GALPÃO 01</span>
+            <span>{isOnline ? 'OPERAÇÃO ATIVA · GALPÃO 01' : 'MODO OFFLINE · CACHE LOCAL'}</span>
           </div>
 
           <label className="v-shell__search">
