@@ -23,7 +23,9 @@
 
 .v-sale-calculation-grid strong {
   color: var(--verdis-text-primary);
-  font-size: 1.125rem;
+  font-family: var(--verdis-font-display);
+  font-size: 1.25rem;
+  font-weight: 600;
 }
 
 @media (max-width: 900px) {

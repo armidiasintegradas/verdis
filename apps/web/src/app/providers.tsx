@@ -23,14 +23,10 @@ function ScopeBoundary({ children }: { children: ReactNode }) {
 }
 
 function SessionBoundary({ children }: { children: ReactNode }) {
-  const { session, loading } = useAuth()
+  const { loading } = useAuth()
 
   if (loading) {
     return <main><p>Carregando sessão…</p></main>
-  }
-
-  if (!session) {
-    return <LoginPage />
   }
 
   return (

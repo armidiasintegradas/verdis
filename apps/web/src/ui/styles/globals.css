@@ -10,6 +10,10 @@ body {
 }
 button, input, select, textarea { font: inherit; }
 button, a { -webkit-tap-highlight-color: transparent; }
+:focus-visible {
+  outline: 2px solid var(--verdis-brand-primary);
+  outline-offset: 2px;
+}
 h1, h2, h3 { margin: 0; font-family: var(--verdis-font-display); font-weight: 600; }
 p { margin: 0; }
 a { color: inherit; }
@@ -25,16 +29,47 @@ a { color: inherit; }
   border-radius: var(--verdis-radius-sm);
   font-weight: 700;
   font-size: 13px;
-  letter-spacing: .01em;
+  letter-spacing: .015em;
   cursor: pointer;
-  transition: background-color .16s ease, border-color .16s ease, color .16s ease, opacity .16s ease;
+  transition: background-color .16s ease, border-color .16s ease, color .16s ease, opacity .16s ease, box-shadow .16s ease;
 }
-.v-button--primary { background: var(--verdis-brand-primary); color: white; }
-.v-button--primary:hover:not(:disabled) { background: var(--verdis-brand-hover); }
-.v-button--secondary { background: var(--verdis-surface); color: var(--verdis-brand-primary); border-color: var(--verdis-border-strong); }
-.v-button--tertiary { background: transparent; color: var(--verdis-brand-primary); padding-inline: 8px; }
-.v-button--danger { background: var(--verdis-error); color: white; }
-.v-button:disabled { opacity: .45; cursor: not-allowed; }
+.v-button--primary {
+  background: var(--verdis-brand-primary);
+  color: white;
+  box-shadow: 0 1px 2px rgba(83, 105, 56, 0.25);
+}
+.v-button--primary:hover:not(:disabled) {
+  background: var(--verdis-brand-hover);
+}
+.v-button--secondary {
+  background: var(--verdis-surface);
+  color: var(--verdis-brand-primary);
+  border-color: var(--verdis-border-strong);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+}
+.v-button--secondary:hover:not(:disabled) {
+  background: var(--verdis-positive-surface);
+  border-color: var(--verdis-brand-primary);
+}
+.v-button--tertiary {
+  background: transparent;
+  color: var(--verdis-brand-primary);
+  padding-inline: 8px;
+}
+.v-button--tertiary:hover:not(:disabled) {
+  text-decoration: underline;
+}
+.v-button--danger {
+  background: var(--verdis-error);
+  color: white;
+}
+.v-button--danger:hover:not(:disabled) {
+  background: #a82d25;
+}
+.v-button:disabled {
+  opacity: .45;
+  cursor: not-allowed;
+}
 
 .v-card {
   background: var(--verdis-surface);
@@ -43,10 +78,34 @@ a { color: inherit; }
   box-shadow: var(--verdis-shadow-sm);
 }
 
-.v-metric-card { min-height: 132px; padding: 20px; display: flex; flex-direction: column; gap: 10px; }
-.v-metric-card__label { color: var(--verdis-text-secondary); font-size: 11px; line-height: 1.25; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
-.v-metric-card__value { font-family: var(--verdis-font-display); font-size: 32px; line-height: 1; font-weight: 600; }
-.v-metric-card__detail { color: var(--verdis-text-secondary); font-size: 13px; line-height: 1.45; }
+.v-metric-card {
+  min-height: 132px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 8px;
+}
+.v-metric-card__label {
+  color: var(--verdis-text-secondary);
+  font-size: 11px;
+  line-height: 1.2;
+  font-weight: 800;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.v-metric-card__value {
+  font-family: var(--verdis-font-display);
+  font-size: 32px;
+  line-height: 1.05;
+  font-weight: 600;
+  color: var(--verdis-text-primary);
+}
+.v-metric-card__detail {
+  color: var(--verdis-text-secondary);
+  font-size: 13px;
+  line-height: 1.45;
+}
 .v-metric-card[data-tone='positive'] .v-metric-card__value { color: var(--verdis-brand-primary); }
 .v-metric-card[data-tone='attention'] .v-metric-card__value { color: var(--verdis-attention); }
 .v-metric-card[data-tone='error'] .v-metric-card__value { color: var(--verdis-error); }
@@ -57,7 +116,7 @@ a { color: inherit; }
   gap: 6px;
   width: fit-content;
   min-height: 24px;
-  padding: 3px 9px;
+  padding: 3px 10px;
   border-radius: var(--verdis-radius-pill);
   font-size: 11px;
   line-height: 1.2;
@@ -71,14 +130,44 @@ a { color: inherit; }
 .v-status-badge[data-tone='attention'] { color: var(--verdis-attention); background: var(--verdis-attention-surface); }
 .v-status-badge[data-tone='error'] { color: var(--verdis-error); background: var(--verdis-error-surface); }
 
-.v-breadcrumb { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 12px; padding: 0; list-style: none; color: var(--verdis-text-secondary); font-size: 11px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+.v-breadcrumb {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px;
+  padding: 0;
+  list-style: none;
+  color: var(--verdis-text-secondary);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
 .v-breadcrumb a { text-decoration: none; }
+.v-breadcrumb a:hover { color: var(--verdis-brand-primary); }
 .v-breadcrumb__separator { color: var(--verdis-border-strong); }
 
-.v-page-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; margin-bottom: 28px; }
+.v-page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 28px;
+}
 .v-page-header__copy { display: grid; gap: 8px; }
-.v-page-header h1 { font-size: clamp(32px, 3vw, 44px); line-height: 1.05; }
-.v-page-header p { max-width: 720px; color: var(--verdis-text-secondary); font-size: 15px; line-height: 1.5; }
+.v-page-header h1 {
+  font-size: clamp(30px, 2.8vw, 42px);
+  line-height: 1.08;
+  font-weight: 600;
+  letter-spacing: -.02em;
+}
+.v-page-header p {
+  max-width: 720px;
+  color: var(--verdis-text-secondary);
+  font-size: 15px;
+  line-height: 1.5;
+}
 
 .v-filter-bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding: 14px; }
 .v-control {
@@ -87,7 +176,14 @@ a { color: inherit; }
   border-radius: var(--verdis-radius-sm);
   background: var(--verdis-surface);
   color: var(--verdis-text-primary);
-  padding: 0 12px;
+  padding: 0 14px;
+  font-size: 13.5px;
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.v-control:focus {
+  border-color: var(--verdis-brand-primary);
+  box-shadow: 0 0 0 2px rgba(83, 105, 56, 0.15);
+  outline: 0;
 }
 .v-control::placeholder { color: var(--verdis-text-muted); }
 
