@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { RouterLink, useRouter } from '@/app/router'
 import { ScopeSelector } from '@/features/scope/scope-selector'
 import { Avatar } from '@/ui/components/avatar'
@@ -21,12 +21,31 @@ type AppShellProps = {
 
 export function AppShell({ children }: AppShellProps) {
   const { pathname } = useRouter()
+  const [sidebarOpen, setSidebarOpen] = useState(false)
 
   return (
     <div className="v-shell">
-      <aside className="v-shell__sidebar">
+      {sidebarOpen ? (
+        <div
+          className="v-shell__backdrop"
+          onClick={() => setSidebarOpen(false)}
+          aria-hidden="true"
+        />
+      ) : null}
+
+      <aside className={`v-shell__sidebar${sidebarOpen ? ' is-open' : ''}`}>
         <div>
-          <div className="v-shell__brand">verdis.</div>
+          <div className="v-shell__sidebar-header">
+            <div className="v-shell__brand">verdis.</div>
+            <button
+              className="v-shell__sidebar-close"
+              type="button"
+              aria-label="Fechar menu"
+              onClick={() => setSidebarOpen(false)}
+            >
+              <Icon name="close" size={20} />
+            </button>
+          </div>
           <div className="v-shell__environment">
             <span className="v-shell__environment-dot" aria-hidden="true" />
             <span><small>AMBIENTE</small>M1 Cooperative Pilot</span>
@@ -41,6 +60,7 @@ export function AppShell({ children }: AppShellProps) {
                   to={href}
                   className={`v-shell__nav-link${active ? ' is-active' : ''}`}
                   aria-current={active ? 'page' : undefined}
+                  onClick={() => setSidebarOpen(false)}
                 >
                   <span className="v-shell__nav-icon"><Icon name={icon} size={19} /></span>
                   <span>{label}</span>
@@ -60,7 +80,18 @@ export function AppShell({ children }: AppShellProps) {
 
       <div className="v-shell__main">
         <header className="v-shell__header">
+          <button
+            className="v-shell__menu-toggle"
+            type="button"
+            aria-label="Abrir menu"
+            onClick={() => setSidebarOpen(true)}
+          >
+            <Icon name="menu" size={22} />
+          </button>
+          <div className="v-shell__mobile-brand">verdis.</div>
+
           <div className="v-shell__unit">
+
             <span className="v-shell__header-icon"><Icon name="building" size={18} /></span>
             <span><small>UNIDADE OPERACIONAL</small><strong>Cooperativa Demo · M1 Pilot</strong></span>
             <div className="v-shell__scope-control"><ScopeSelector /></div>
