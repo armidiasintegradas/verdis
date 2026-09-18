@@ -3,6 +3,7 @@ import { useScope } from '@/features/scope/scope-provider'
 import { listAuditEvents, listAuditExceptions } from './audit-service'
 import type { AuditEventItem, AuditExceptionItem } from './types'
 import { ExceptionQueue } from './exception-queue'
+import { CustodyChain } from './custody-chain'
 import { Breadcrumb } from '@/ui/components/breadcrumb'
 import { PageHeader } from '@/ui/components/page-header'
 import { StatusBadge } from '@/ui/components/status-badge'
@@ -112,6 +113,8 @@ export function AuditCenterPage() {
       </div>
 
       <ExceptionQueue />
+
+      <CustodyChain />
 
       <section className="v-receipt-panel">
         <div className="v-section-heading">
