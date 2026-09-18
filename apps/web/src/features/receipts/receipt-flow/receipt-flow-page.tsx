@@ -12,6 +12,7 @@ import { Breadcrumb } from '@/ui/components/breadcrumb'
 import { Button } from '@/ui/components/button'
 import { PageHeader } from '@/ui/components/page-header'
 import { StatusBadge } from '@/ui/components/status-badge'
+import { AuditTimeline } from '@/features/audit/audit-timeline'
 import './receipt-flow.css'
 
 type ReceiptFlowPageProps = { movementId: string | null }
@@ -496,6 +497,7 @@ export function ReceiptFlowPage({ movementId }: ReceiptFlowPageProps) {
             <Button variant="secondary" type="button" onClick={() => navigate('/recebimentos')}>VER MOVIMENTAÇÃO</Button>
             <Button type="button" onClick={() => navigate('/recebimentos/novo?step=dados')}>RECEBER OUTRO MATERIAL</Button>
           </div>
+          {movementId ? <AuditTimeline subjectType="movement" subjectId={movementId} /> : null}
         </section>
       ) : null}
     </div>

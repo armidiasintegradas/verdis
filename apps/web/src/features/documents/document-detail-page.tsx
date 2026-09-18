@@ -7,6 +7,7 @@ import { Breadcrumb } from '@/ui/components/breadcrumb'
 import { Button } from '@/ui/components/button'
 import { PageHeader } from '@/ui/components/page-header'
 import { StatusBadge } from '@/ui/components/status-badge'
+import { AuditTimeline } from '@/features/audit/audit-timeline'
 
 const kg = (value: number | null) => value === null ? 'Não identificado' : `${value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kg`
 const money = (value: number | null) => value === null ? 'Não identificado' : value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
@@ -72,6 +73,8 @@ export function DocumentDetailPage({ documentId }: { documentId: string }) {
       {detail.saleComparison ? <section className="v-receipt-panel"><div className="v-section-heading"><h2>Conferência da venda</h2></div><div className="v-list"><div className="v-row"><div><div className="v-row__meta">Quantidade registrada</div><div className="v-row__title">{kg(detail.saleComparison.registered.quantityKg)}</div></div><div><div className="v-row__meta">Preço registrado</div><div className="v-row__title">{money(detail.saleComparison.registered.unitPrice)}</div></div><div><div className="v-row__meta">Preço no documento</div><div className="v-row__title">{money(detail.saleComparison.documentary.unitPrice)}</div></div><div><div className="v-row__meta">Diferença total</div><div className="v-row__title">{money(detail.saleComparison.totalDifference)}</div></div></div></div></section> : null}
 
       {detail.resolution ? <section className="v-receipt-panel"><div className="v-section-heading"><h2>Resolução humana</h2></div><strong>{detail.resolution.label}</strong>{detail.resolution.reason ? <p>{detail.resolution.reason}</p> : null}</section> : detail.reviewState === 'required' ? <div className="v-receipt-alert">Existe uma divergência documental ainda sem resolução humana registrada.</div> : null}
+
+      <AuditTimeline subjectType="document" subjectId={detail.documentId} />
 
       <div className="v-integrity-note">A extração interpreta o arquivo; a resolução humana, quando existente, permanece registrada separadamente.</div>
     </div>

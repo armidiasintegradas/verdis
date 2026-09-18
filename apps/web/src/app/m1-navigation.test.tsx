@@ -1,3 +1,4 @@
+import '@testing-library/jest-dom/vitest'
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, expect, test, vi } from 'vitest'
 import { ScopeProvider, type ScopeMembership } from '@/features/scope/scope-provider'
@@ -26,6 +27,10 @@ vi.mock('@/features/documents/document-detail-page', () => ({
   ),
 }))
 
+vi.mock('@/features/audit/audit-center-page', () => ({
+  AuditCenterPage: () => <h1>Auditoria</h1>,
+}))
+
 const membership: ScopeMembership = {
   membershipId: 'membership-id',
   roleId: 'role-id',
@@ -41,6 +46,7 @@ const cases = [
   ['/vendas', 'Vendas'],
   ['/documentos', 'Documentos'],
   ['/pendencias', 'Pendências'],
+  ['/auditoria', 'Auditoria'],
 ] as const
 
 beforeEach(() => {

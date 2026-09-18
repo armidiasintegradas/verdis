@@ -1,3 +1,4 @@
+import { AuditCenterPage } from '@/features/audit/audit-center-page'
 import { DocumentDetailPage } from '@/features/documents/document-detail-page'
 import { DocumentsPage } from '@/features/documents/documents-page'
 import { HomePage } from '@/features/home/home-page'
@@ -57,6 +58,8 @@ export function AppRoutes() {
         return <DocumentsPage />
       case '/pendencias':
         return <PendingPage />
+      case '/auditoria':
+        return <AuditCenterPage />
       case '/':
       default:
         return <HomePage />
