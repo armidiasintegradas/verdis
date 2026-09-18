@@ -38,7 +38,10 @@ export type Database = {
         Row: {
           action: string
           actor_user_id: string | null
+          causation_event_id: string | null
+          correlation_id: string | null
           id: string
+          justification: string | null
           new_state: Json | null
           occurred_at: string
           organization_id: string | null
@@ -47,11 +50,15 @@ export type Database = {
           subject_type: string
           technical_context: Json
           tenant_id: string
+          unit_id: string | null
         }
         Insert: {
           action: string
           actor_user_id?: string | null
+          causation_event_id?: string | null
+          correlation_id?: string | null
           id?: string
+          justification?: string | null
           new_state?: Json | null
           occurred_at?: string
           organization_id?: string | null
@@ -60,11 +67,15 @@ export type Database = {
           subject_type: string
           technical_context?: Json
           tenant_id: string
+          unit_id?: string | null
         }
         Update: {
           action?: string
           actor_user_id?: string | null
+          causation_event_id?: string | null
+          correlation_id?: string | null
           id?: string
+          justification?: string | null
           new_state?: Json | null
           occurred_at?: string
           organization_id?: string | null
@@ -73,8 +84,16 @@ export type Database = {
           subject_type?: string
           technical_context?: Json
           tenant_id?: string
+          unit_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "audit_events_causation_event_id_fkey"
+            columns: ["causation_event_id"]
+            isOneToOne: false
+            referencedRelation: "audit_events"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "audit_events_organization_id_fkey"
             columns: ["organization_id"]
@@ -87,6 +106,106 @@ export type Database = {
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "audit_events_unit_id_fkey"
+            columns: ["unit_id"]
+            isOneToOne: false
+            referencedRelation: "units"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      audit_exceptions: {
+        Row: {
+          assigned_to_user_id: string | null
+          corrective_event_id: string | null
+          id: string
+          opened_at: string
+          opened_by_user_id: string
+          organization_id: string
+          resolution_justification: string | null
+          resolution_result: string | null
+          resolved_at: string | null
+          source_event_id: string | null
+          state: string
+          subject_id: string
+          subject_type: string
+          tenant_id: string
+          unit_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          assigned_to_user_id?: string | null
+          corrective_event_id?: string | null
+          id?: string
+          opened_at?: string
+          opened_by_user_id: string
+          organization_id: string
+          resolution_justification?: string | null
+          resolution_result?: string | null
+          resolved_at?: string | null
+          source_event_id?: string | null
+          state?: string
+          subject_id: string
+          subject_type: string
+          tenant_id: string
+          unit_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          assigned_to_user_id?: string | null
+          corrective_event_id?: string | null
+          id?: string
+          opened_at?: string
+          opened_by_user_id?: string
+          organization_id?: string
+          resolution_justification?: string | null
+          resolution_result?: string | null
+          resolved_at?: string | null
+          source_event_id?: string | null
+          state?: string
+          subject_id?: string
+          subject_type?: string
+          tenant_id?: string
+          unit_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "audit_exceptions_corrective_event_id_fkey"
+            columns: ["corrective_event_id"]
+            isOneToOne: false
+            referencedRelation: "audit_events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "audit_exceptions_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "audit_exceptions_source_event_id_fkey"
+            columns: ["source_event_id"]
+            isOneToOne: false
+            referencedRelation: "audit_events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "audit_exceptions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "audit_exceptions_unit_id_fkey"
+            columns: ["unit_id"]
+            isOneToOne: false
+            referencedRelation: "units"
             referencedColumns: ["id"]
           },
         ]
@@ -139,6 +258,214 @@ export type Database = {
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      custody_lot_consumptions: {
+        Row: {
+          correlation_id: string
+          created_at: string
+          created_by: string | null
+          destination_subject_id: string | null
+          id: string
+          lot_id: string
+          organization_id: string
+          quantity_kg: number
+          tenant_id: string
+          unit_id: string
+        }
+        Insert: {
+          correlation_id: string
+          created_at?: string
+          created_by?: string | null
+          destination_subject_id?: string | null
+          id?: string
+          lot_id: string
+          organization_id: string
+          quantity_kg: number
+          tenant_id: string
+          unit_id: string
+        }
+        Update: {
+          correlation_id?: string
+          created_at?: string
+          created_by?: string | null
+          destination_subject_id?: string | null
+          id?: string
+          lot_id?: string
+          organization_id?: string
+          quantity_kg?: number
+          tenant_id?: string
+          unit_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "custody_lot_consumptions_lot_id_fkey"
+            columns: ["lot_id"]
+            isOneToOne: false
+            referencedRelation: "custody_lots"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "custody_lot_consumptions_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "custody_lot_consumptions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "custody_lot_consumptions_unit_id_fkey"
+            columns: ["unit_id"]
+            isOneToOne: false
+            referencedRelation: "units"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      custody_lot_links: {
+        Row: {
+          child_lot_id: string
+          created_at: string
+          id: string
+          organization_id: string
+          parent_lot_id: string
+          quantity_kg: number
+          relation_kind: string
+          tenant_id: string
+          unit_id: string
+        }
+        Insert: {
+          child_lot_id: string
+          created_at?: string
+          id?: string
+          organization_id: string
+          parent_lot_id: string
+          quantity_kg: number
+          relation_kind: string
+          tenant_id: string
+          unit_id: string
+        }
+        Update: {
+          child_lot_id?: string
+          created_at?: string
+          id?: string
+          organization_id?: string
+          parent_lot_id?: string
+          quantity_kg?: number
+          relation_kind?: string
+          tenant_id?: string
+          unit_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "custody_lot_links_child_lot_id_fkey"
+            columns: ["child_lot_id"]
+            isOneToOne: false
+            referencedRelation: "custody_lots"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "custody_lot_links_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "custody_lot_links_parent_lot_id_fkey"
+            columns: ["parent_lot_id"]
+            isOneToOne: false
+            referencedRelation: "custody_lots"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "custody_lot_links_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "custody_lot_links_unit_id_fkey"
+            columns: ["unit_id"]
+            isOneToOne: false
+            referencedRelation: "units"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      custody_lots: {
+        Row: {
+          available_quantity_kg: number
+          created_at: string
+          created_by: string | null
+          id: string
+          material_id: string
+          organization_id: string
+          originated_quantity_kg: number
+          source_subject_id: string | null
+          tenant_id: string
+          unit_id: string
+        }
+        Insert: {
+          available_quantity_kg: number
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          material_id: string
+          organization_id: string
+          originated_quantity_kg: number
+          source_subject_id?: string | null
+          tenant_id: string
+          unit_id: string
+        }
+        Update: {
+          available_quantity_kg?: number
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          material_id?: string
+          organization_id?: string
+          originated_quantity_kg?: number
+          source_subject_id?: string | null
+          tenant_id?: string
+          unit_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "custody_lots_material_id_fkey"
+            columns: ["material_id"]
+            isOneToOne: false
+            referencedRelation: "materials"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "custody_lots_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "custody_lots_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "custody_lots_unit_id_fkey"
+            columns: ["unit_id"]
+            isOneToOne: false
+            referencedRelation: "units"
             referencedColumns: ["id"]
           },
         ]
@@ -1236,7 +1563,168 @@ export type Database = {
       }
     }
     Functions: {
-      [_ in never]: never
+      claim_audit_exception: {
+        Args: { p_exception_id: string; p_justification: string }
+        Returns: undefined
+      }
+      confirm_receipt_m1: {
+        Args: {
+          p_decision: string
+          p_evidence_id?: string
+          p_movement_id: string
+          p_reason?: string
+        }
+        Returns: {
+          adopted_quantity_kg: number
+          movement_id: string
+          new_stock_kg: number
+          previous_stock_kg: number
+        }[]
+      }
+      confirm_sale_m1: {
+        Args: {
+          p_decision: string
+          p_evidence_id?: string
+          p_movement_id: string
+          p_reason?: string
+        }
+        Returns: {
+          adopted_quantity_kg: number
+          adopted_total_amount: number
+          adopted_unit_price: number
+          movement_id: string
+          new_stock_kg: number
+          previous_stock_kg: number
+          sale_id: string
+        }[]
+      }
+      consume_custody_lot: {
+        Args: {
+          p_destination_subject_id: string
+          p_justification: string
+          p_lot_id: string
+          p_quantity_kg: number
+        }
+        Returns: string
+      }
+      create_custody_lot: {
+        Args: {
+          p_justification: string
+          p_material_id: string
+          p_organization_id: string
+          p_quantity_kg: number
+          p_source_subject_id: string
+          p_tenant_id: string
+          p_unit_id: string
+        }
+        Returns: string
+      }
+      create_sale_draft_m1: {
+        Args: {
+          p_buyer_counterparty_id: string
+          p_material_id: string
+          p_organization_id: string
+          p_quantity_kg: number
+          p_sold_at: string
+          p_unit_id?: string
+          p_unit_price: number
+        }
+        Returns: {
+          movement_id: string
+          sale_id: string
+          total_amount: number
+        }[]
+      }
+      merge_custody_lots: {
+        Args: {
+          p_correlation_id: string
+          p_justification: string
+          p_lot_ids: string[]
+        }
+        Returns: string
+      }
+      open_audit_exception: {
+        Args: {
+          p_justification: string
+          p_organization_id: string
+          p_source_event_id: string
+          p_subject_id: string
+          p_subject_type: string
+          p_tenant_id: string
+          p_unit_id: string
+        }
+        Returns: string
+      }
+      reassign_audit_exception: {
+        Args: {
+          p_assignee_user_id: string
+          p_exception_id: string
+          p_justification: string
+        }
+        Returns: undefined
+      }
+      register_receipt_evidence_document: {
+        Args: {
+          p_claimed_quantity_kg: number
+          p_mime_type: string
+          p_movement_id: string
+          p_original_filename: string
+          p_sha256: string
+          p_storage_path: string
+        }
+        Returns: {
+          document_id: string
+          evidence_id: string
+        }[]
+      }
+      register_sale_evidence_document: {
+        Args: {
+          p_claimed_quantity_kg: number
+          p_claimed_unit_price: number
+          p_mime_type: string
+          p_movement_id: string
+          p_original_filename: string
+          p_sha256: string
+          p_storage_path: string
+        }
+        Returns: {
+          document_id: string
+          evidence_id: string
+        }[]
+      }
+      resolve_audit_exception: {
+        Args: {
+          p_corrective_event_id?: string
+          p_exception_id: string
+          p_justification: string
+          p_result: string
+        }
+        Returns: undefined
+      }
+      split_custody_lot: {
+        Args: {
+          p_correlation_id: string
+          p_justification: string
+          p_lot_id: string
+          p_quantities_kg: number[]
+        }
+        Returns: string[]
+      }
+      update_sale_draft_m1: {
+        Args: {
+          p_buyer_counterparty_id: string
+          p_material_id: string
+          p_movement_id: string
+          p_quantity_kg: number
+          p_sold_at: string
+          p_unit_price: number
+        }
+        Returns: {
+          movement_id: string
+          sale_id: string
+          total_amount: number
+        }[]
+      }
     }
     Enums: {
       evidence_level:

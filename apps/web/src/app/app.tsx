@@ -1,7 +1,10 @@
+import { RouterProvider } from './router'
+import { AppRoutes } from './routes'
+
 export function App() {
   return (
-    <main>
-      <h1>Verdis Core</h1>
-    </main>
+    <RouterProvider>
+      <AppRoutes />
+    </RouterProvider>
   )
 }

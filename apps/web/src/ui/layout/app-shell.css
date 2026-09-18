@@ -1,0 +1,201 @@
+.v-shell {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: var(--verdis-sidebar-width) minmax(0, 1fr);
+  background: var(--verdis-app-background);
+}
+
+.v-shell__sidebar {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 28px 20px 18px;
+  border-right: 1px solid var(--verdis-border);
+  background: #f6f8f1;
+}
+
+.v-shell__brand {
+  padding: 0 8px;
+  font-family: var(--verdis-font-display);
+  font-size: 36px;
+  line-height: 1;
+  letter-spacing: -.04em;
+}
+
+.v-shell__environment {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 26px;
+  padding: 11px 12px;
+  border-radius: var(--verdis-radius-pill);
+  background: var(--verdis-brand-soft);
+  color: var(--verdis-text-primary);
+  font-size: 12px;
+}
+.v-shell__environment span:last-child { display: grid; gap: 1px; }
+.v-shell__environment small { font-size: 9px; font-weight: 800; letter-spacing: .07em; }
+.v-shell__environment-dot,
+.v-shell__operation-dot { width: 7px; height: 7px; flex: 0 0 7px; border-radius: 50%; background: var(--verdis-brand-primary); }
+
+.v-shell__nav { display: grid; gap: 6px; margin-top: 28px; }
+.v-shell__nav-link {
+  position: relative;
+  min-height: 44px;
+  display: grid;
+  grid-template-columns: 24px 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 0 12px;
+  border-radius: var(--verdis-radius-sm);
+  color: #394235;
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 650;
+}
+.v-shell__nav-link:hover { background: var(--verdis-positive-surface); }
+.v-shell__nav-link.is-active { background: var(--verdis-brand-primary); color: white; }
+.v-shell__nav-icon { width: 22px; text-align: center; font-size: 18px; line-height: 1; }
+.v-shell__nav-count {
+  min-width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 6px;
+  border-radius: var(--verdis-radius-pill);
+  background: var(--verdis-error);
+  color: white;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.v-shell__sidebar-user {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 8px 0;
+  border-top: 1px solid var(--verdis-border);
+}
+.v-shell__sidebar-user-copy,
+.v-shell__identity > span { display: grid; gap: 2px; }
+.v-shell__sidebar-user-copy strong,
+.v-shell__identity strong { font-size: 12px; }
+.v-shell__sidebar-user-copy small,
+.v-shell__identity small { color: var(--verdis-text-secondary); font-size: 10px; }
+.v-shell__settings { color: var(--verdis-text-secondary); font-size: 16px; }
+
+.v-avatar {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--verdis-border-strong);
+  border-radius: 50%;
+  background: var(--verdis-brand-soft);
+  color: var(--verdis-brand-primary);
+}
+
+.v-shell__main { min-width: 0; }
+.v-shell__header {
+  height: var(--verdis-header-height);
+  display: grid;
+  grid-template-columns: minmax(230px, 1fr) auto minmax(220px, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 0 28px;
+  border-bottom: 1px solid var(--verdis-border);
+  background: rgb(255 255 255 / .88);
+  backdrop-filter: blur(14px);
+}
+.v-shell__unit {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 12px;
+  border: 1px solid var(--verdis-border);
+  border-radius: var(--verdis-radius-sm);
+  background: var(--verdis-surface);
+}
+.v-shell__unit > span:nth-child(2) { min-width: 0; display: grid; gap: 1px; }
+.v-shell__unit small { color: var(--verdis-text-secondary); font-size: 9px; font-weight: 800; letter-spacing: .08em; }
+.v-shell__unit strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.v-shell__scope-control { color: var(--verdis-text-secondary); font-size: 10px; }
+.v-shell__scope-control label { display: inline-flex; align-items: center; gap: 6px; }
+.v-shell__scope-control select { max-width: 122px; border: 0; background: transparent; color: inherit; font-size: 10px; }
+.v-shell__scope-control [aria-label='Unidade operacional ativa'] { display: none; }
+.v-shell__header-icon { color: var(--verdis-brand-primary); }
+
+.v-shell__operation {
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 14px;
+  border: 1px solid #d4dfc6;
+  border-radius: var(--verdis-radius-pill);
+  background: var(--verdis-brand-soft);
+  color: #42542f;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .035em;
+  white-space: nowrap;
+}
+
+.v-shell__search {
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  border: 1px solid var(--verdis-border);
+  border-radius: var(--verdis-radius-sm);
+  background: var(--verdis-surface);
+  color: var(--verdis-text-secondary);
+}
+.v-shell__search input { min-width: 0; width: 100%; border: 0; outline: 0; background: transparent; color: var(--verdis-text-primary); }
+
+.v-shell__icon-button {
+  position: relative;
+  width: 38px;
+  height: 38px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--verdis-text-primary);
+  cursor: pointer;
+}
+.v-shell__notification-dot { position: absolute; top: 7px; right: 7px; width: 7px; height: 7px; border: 2px solid white; border-radius: 50%; background: var(--verdis-error); }
+.v-shell__identity { display: flex; align-items: center; gap: 9px; min-width: 132px; }
+.v-shell__identity small { display: inline-flex; align-items: center; gap: 5px; }
+.v-shell__identity i { width: 6px; height: 6px; border-radius: 50%; background: var(--verdis-brand-primary); }
+
+.v-shell__content {
+  max-width: var(--verdis-content-max);
+  margin: 0 auto;
+  padding: var(--verdis-space-xl);
+}
+
+.v-visually-hidden {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
+@media (max-width: 1120px) {
+  .v-shell { grid-template-columns: 220px minmax(0, 1fr); }
+  .v-shell__header { grid-template-columns: minmax(190px, 1fr) auto minmax(160px, 1fr) auto; }
+  .v-shell__identity { display: none; }
+}
