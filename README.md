@@ -85,7 +85,9 @@ Portanto, o primeiro produto é:
 
 - `docs/product/PRD.md` — requisitos do produto e escopo do MVP.
 - `docs/architecture/domain-model.md` — entidades, responsabilidades e relacionamentos do núcleo.
-- `docs/superpowers/specs/2026-09-15-verdis-core-foundation-design.md` — especificação arquitetural aprovada para a fundação.
+- `docs/ux/verdis-ui-system-v1.1.md` — especificação do Design System e Master Reference.
+- `docs/verification/m1-stitch-acceptance.md` — registro de homologação desktop do M1 Cooperative Pilot.
+- `docs/verification/m1-mobile-acceptance.md` — registro de homologação mobile e PWA do M1 Cooperative Pilot.
 
 ## Milestones planejadas
 
