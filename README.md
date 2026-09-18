@@ -2,6 +2,38 @@
 
 Plataforma integrada de gestão da circularidade e impacto socioambiental.
 
+## 🚀 Demonstração Online (M1 Cooperative Pilot)
+
+A interface operacional do **M1 Cooperative Pilot** está homologada e publicada em produção:
+👉 **[https://armidiasintegradas.github.io/verdisos/](https://armidiasintegradas.github.io/verdisos/)**
+
+Ambiente padrão: **Cooperativa Demo · M1 Pilot (Galpão 01)**.
+
+## 🛠️ Como Executar Localmente
+
+### Pré-requisitos
+- Node.js 22+
+- pnpm 10+
+
+### Instalação e Execução
+```bash
+# Instalar dependências
+pnpm install
+
+# Iniciar ambiente de desenvolvimento
+pnpm dev
+
+# Executar testes unitários (Vitest)
+pnpm test
+
+# Checagem de tipos (TypeScript)
+pnpm typecheck
+
+# Build de produção
+pnpm build
+```
+
+
 ## Propósito
 
 A Verdis transforma operação ambiental em informação confiável, rastreável e útil para diferentes públicos. O produto nasce com foco em resíduos, circularidade e evidências, evoluindo depois para compliance, indicadores ambientais, ESG e inteligência.
