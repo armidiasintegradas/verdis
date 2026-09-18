@@ -220,3 +220,75 @@ export async function getCustodyChain(
 
   throw new Error(`Rastreabilidade direta para o tipo ${subject.type} ainda não implementada.`)
 }
+
+export type OpenAuditExceptionInput = {
+  subjectType: string
+  subjectId: string
+  justification: string
+  sourceEventId?: string
+}
+
+export async function openAuditException(
+  scope: ActiveScope,
+  input: OpenAuditExceptionInput,
+): Promise<string> {
+  const { data, error } = await supabase.rpc('open_audit_exception', {
+    p_tenant_id: scope.tenantId,
+    p_organization_id: scope.organizationId,
+    p_unit_id: scope.unitId ?? null as any,
+    p_subject_type: input.subjectType,
+    p_subject_id: input.subjectId,
+    p_source_event_id: input.sourceEventId ?? null as any,
+    p_justification: input.justification,
+  })
+
+  if (error) throw error
+  return data as string
+}
+
+export async function claimAuditException(
+  exceptionId: string,
+  justification: string,
+): Promise<void> {
+  const { error } = await supabase.rpc('claim_audit_exception', {
+    p_exception_id: exceptionId,
+    p_justification: justification,
+  })
+
+  if (error) throw error
+}
+
+export async function reassignAuditException(
+  exceptionId: string,
+  assigneeUserId: string,
+  justification: string,
+): Promise<void> {
+  const { error } = await supabase.rpc('reassign_audit_exception', {
+    p_exception_id: exceptionId,
+    p_assignee_user_id: assigneeUserId,
+    p_justification: justification,
+  })
+
+  if (error) throw error
+}
+
+export type ResolveAuditExceptionInput = {
+  result: 'confirmed' | 'corrected' | 'justified' | 'rejected' | 'escalated'
+  justification: string
+  correctiveEventId?: string
+}
+
+export async function resolveAuditException(
+  exceptionId: string,
+  input: ResolveAuditExceptionInput,
+): Promise<void> {
+  const { error } = await supabase.rpc('resolve_audit_exception', {
+    p_exception_id: exceptionId,
+    p_result: input.result,
+    p_justification: input.justification,
+    p_corrective_event_id: input.correctiveEventId ?? null as any,
+  })
+
+  if (error) throw error
+}
+

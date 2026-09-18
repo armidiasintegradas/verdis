@@ -1,14 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ActiveScope } from '@/domain/scope'
 
-const mocks = vi.hoisted(() => ({ from: vi.fn() }))
-vi.mock('@/lib/supabase/client', () => ({ supabase: { from: mocks.from } }))
+const mocks = vi.hoisted(() => ({ from: vi.fn(), rpc: vi.fn() }))
+vi.mock('@/lib/supabase/client', () => ({ supabase: { from: mocks.from, rpc: mocks.rpc } }))
 
 import {
+  claimAuditException,
   getCustodyChain,
   getSubjectTimeline,
   listAuditEvents,
   listAuditExceptions,
+  openAuditException,
+  reassignAuditException,
+  resolveAuditException,
 } from './audit-service'
 
 const scope: ActiveScope = {
@@ -265,4 +269,83 @@ describe('audit-service', () => {
       ).rejects.toThrow('Lote de custódia non-existent não encontrado no escopo ativo.')
     })
   })
+
+  describe('exception workflow RPCs', () => {
+    it('calls open_audit_exception with scope and parameters', async () => {
+      mocks.rpc.mockResolvedValue({ data: 'exc-new-id', error: null })
+
+      const result = await openAuditException(scope, {
+        subjectType: 'movement',
+        subjectId: 'mov-123',
+        justification: 'Discrepância na pesagem',
+        sourceEventId: 'evt-456',
+      })
+
+      expect(result).toBe('exc-new-id')
+      expect(mocks.rpc).toHaveBeenCalledWith('open_audit_exception', {
+        p_tenant_id: 'tenant-001',
+        p_organization_id: 'org-001',
+        p_unit_id: 'unit-001',
+        p_subject_type: 'movement',
+        p_subject_id: 'mov-123',
+        p_source_event_id: 'evt-456',
+        p_justification: 'Discrepância na pesagem',
+      })
+    })
+
+    it('calls claim_audit_exception with exception id and justification', async () => {
+      mocks.rpc.mockResolvedValue({ data: null, error: null })
+
+      await claimAuditException('exc-123', 'Assumindo para validação')
+
+      expect(mocks.rpc).toHaveBeenCalledWith('claim_audit_exception', {
+        p_exception_id: 'exc-123',
+        p_justification: 'Assumindo para validação',
+      })
+    })
+
+    it('calls reassign_audit_exception with exception id, assignee and justification', async () => {
+      mocks.rpc.mockResolvedValue({ data: null, error: null })
+
+      await reassignAuditException('exc-123', 'user-auditor-2', 'Redirecionando para especialista')
+
+      expect(mocks.rpc).toHaveBeenCalledWith('reassign_audit_exception', {
+        p_exception_id: 'exc-123',
+        p_assignee_user_id: 'user-auditor-2',
+        p_justification: 'Redirecionando para especialista',
+      })
+    })
+
+    it('calls resolve_audit_exception with result, justification and corrective event', async () => {
+      mocks.rpc.mockResolvedValue({ data: null, error: null })
+
+      await resolveAuditException('exc-123', {
+        result: 'corrected',
+        justification: 'Conferido e ajustado com ticket de balança avulso',
+        correctiveEventId: 'evt-corrective-789',
+      })
+
+      expect(mocks.rpc).toHaveBeenCalledWith('resolve_audit_exception', {
+        p_exception_id: 'exc-123',
+        p_result: 'corrected',
+        p_justification: 'Conferido e ajustado com ticket de balança avulso',
+        p_corrective_event_id: 'evt-corrective-789',
+      })
+    })
+
+    it('throws error when RPC returns an error', async () => {
+      mocks.rpc.mockResolvedValue({
+        data: null,
+        error: new Error('segregation of duties: author cannot validate own critical action'),
+      })
+
+      await expect(
+        resolveAuditException('exc-123', {
+          result: 'justified',
+          justification: 'Tudo certo',
+        }),
+      ).rejects.toThrow('segregation of duties: author cannot validate own critical action')
+    })
+  })
 })
+
