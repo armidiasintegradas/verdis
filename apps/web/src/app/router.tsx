@@ -33,9 +33,17 @@ function parseLocation(to: string, base: string): RouterLocation {
   return { pathname: url.pathname, search: url.search }
 }
 
+function normalizePathname(raw: string): string {
+  if (raw.startsWith('/verdisos')) {
+    const stripped = raw.slice('/verdisos'.length)
+    return stripped.startsWith('/') ? stripped : `/${stripped}`
+  }
+  return raw || '/'
+}
+
 function browserLocation(): RouterLocation {
   return {
-    pathname: window.location.pathname || '/',
+    pathname: normalizePathname(window.location.pathname),
     search: window.location.search,
   }
 }
@@ -67,7 +75,8 @@ export function RouterProvider({ children, initialPath }: RouterProviderProps) {
       }
 
       if (!initialPath) {
-        window.history.pushState({}, '', `${next.pathname}${next.search}`)
+        const prefix = window.location.pathname.startsWith('/verdisos') ? '/verdisos' : ''
+        window.history.pushState({}, '', `${prefix}${next.pathname}${next.search}`)
       }
 
       setLocation(next)
